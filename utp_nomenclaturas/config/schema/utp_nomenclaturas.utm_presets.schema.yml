@@ -1,0 +1,66 @@
+# Schema para utp_nomenclaturas.utm_presets (Anexo B del SDD).
+utp_nomenclaturas.utm_presets:
+  type: config_object
+  label: 'UTP Nomenclaturas — Presets UTM'
+  mapping:
+    utm_presets:
+      type: sequence
+      label: 'Presets por plataforma/sub-tipo (§3.4 del SDD)'
+      sequence:
+        type: mapping
+        label: 'Preset'
+        mapping:
+          plat:
+            type: string
+            label: Plataforma
+          source:
+            type: string
+            label: utm_source
+          medium:
+            type: string
+            label: utm_medium
+          campaign:
+            type: string
+            label: 'utm_campaign (plantilla o HARD)'
+          term:
+            type: string
+            label: 'utm_term (plantilla)'
+          content:
+            type: string
+            label: 'utm_content (plantilla)'
+          ga4:
+            type: string
+            label: 'Canal GA4'
+    medio_to_preset:
+      type: sequence
+      label: 'medio → clave de preset'
+      sequence:
+        type: string
+    plat_paste:
+      type: sequence
+      label: 'Dónde se pegan los parámetros por plataforma (§3.4 del SDD)'
+      sequence:
+        type: mapping
+        label: 'Instrucción de pegado'
+        mapping:
+          sep:
+            type: boolean
+            label: 'Parámetros en campo aparte'
+          where:
+            type: string
+            label: 'Ubicación en la plataforma'
+    ux_sources:
+      type: sequence
+      label: 'Sources sugeridos para UTM manual'
+      sequence:
+        type: string
+    ux_mediums:
+      type: sequence
+      label: 'Mediums sugeridos para UTM manual'
+      sequence:
+        type: string
+    reserved_src:
+      type: sequence
+      label: 'Sources reservados que fragmentan GA4'
+      sequence:
+        type: string

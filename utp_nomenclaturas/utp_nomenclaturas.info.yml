@@ -1,0 +1,8 @@
+name: 'UTP Nomenclaturas'
+type: module
+description: 'Constructor de nomenclaturas de campaña y derivación de UTMs para UTP.'
+package: UTP
+core_version_requirement: '>=10.3 <12'
+version: '0.1.0'
+dependencies:
+  - drupal:user

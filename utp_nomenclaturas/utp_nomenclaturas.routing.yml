@@ -1,0 +1,10 @@
+# Contrato de API completo en §7 del SDD. En Fase 0 solo se expone /config
+# (sin auth/CSRF real todavía, eso llega en Fase 4) para poder ejercitar
+# DictionaryProvider end-to-end en el Kernel test.
+utp_nomenclaturas.config:
+  path: '/api/utp-nomenclaturas/v1/config'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\UtmConfigController::getConfig'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas config'

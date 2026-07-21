@@ -1,0 +1,99 @@
+# Schema para utp_nomenclaturas.dictionary (Anexo A del SDD).
+#
+# Nota: donde las claves son arbitrarias/editables (códigos de facultad, sede,
+# grupo, etc. — Config Nivel 1/2/3, §9.2 del SDD) se usa `sequence`, que en el
+# sistema de config de Drupal valida el TIPO de cada valor sin exigir un
+# listado fijo de claves. `mapping` se reserva para estructuras de forma fija
+# conocida por el dominio (las 3 etapas, los 2 segmentos, los 14 campos de
+# listas).
+utp_nomenclaturas.dictionary:
+  type: config_object
+  label: 'UTP Nomenclaturas — Diccionario'
+  mapping:
+    lists:
+      type: mapping
+      label: 'Listas de valores (§5 del SDD)'
+      mapping:
+        segmento: &string_sequence
+          type: sequence
+          label: 'Valores'
+          sequence:
+            type: string
+            label: 'Valor'
+        etapa: *string_sequence
+        campus: *string_sequence
+        edad: *string_sequence
+        ubicacion: *string_sequence
+        facultad: *string_sequence
+        senal: *string_sequence
+        detalle: *string_sequence
+        formato: *string_sequence
+        nombre: *string_sequence
+        motivo: *string_sequence
+        mensaje: *string_sequence
+        carrera: *string_sequence
+        fecha: *string_sequence
+    etapa_conditionals:
+      type: mapping
+      label: 'D1 — etapa → medio/objCamp/objPlat/tipoCamp'
+      mapping:
+        medio: &etapa_map
+          type: mapping
+          label: 'Por etapa'
+          mapping:
+            upper:
+              type: sequence
+              sequence: { type: string }
+            middle:
+              type: sequence
+              sequence: { type: string }
+            lower:
+              type: sequence
+              sequence: { type: string }
+        objCamp: *etapa_map
+        objPlat: *etapa_map
+        tipoCamp: *etapa_map
+    segmento_pilar:
+      type: mapping
+      label: 'D2 — segmento → pilar'
+      mapping:
+        adultos:
+          type: sequence
+          sequence: { type: string }
+        jovenes:
+          type: sequence
+          sequence: { type: string }
+    facultad_nombre:
+      type: sequence
+      label: 'Código de facultad → nombre'
+      sequence:
+        type: string
+    campus_facultad:
+      type: sequence
+      label: 'D3/D4 — facultad → sedes permitidas'
+      sequence:
+        type: sequence
+        sequence:
+          type: string
+    ubicacion_grupo:
+      type: sequence
+      label: 'D3 — grupo de ubicación → sedes miembro'
+      sequence:
+        type: sequence
+        sequence:
+          type: string
+    sedes_especificas:
+      type: sequence
+      label: 'Sedes específicas (matriz D4)'
+      sequence:
+        type: string
+    sede_grupo:
+      type: sequence
+      label: 'Sede → grupo'
+      sequence:
+        type: string
+    platforms:
+      type: sequence
+      label: 'Orden de plataformas para export (§3.5 del SDD)'
+      sequence:
+        type: string

@@ -1,0 +1,4 @@
+services:
+  utp_nomenclaturas.dictionary_provider:
+    class: Drupal\utp_nomenclaturas\Service\DictionaryProvider
+    arguments: ['@config.factory']

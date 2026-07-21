@@ -1,0 +1,7 @@
+# Permisos reales (roles, CSRF, ruta admin) llegan en Fase 4 (§9.5 del SDD).
+# Placeholder mínimo para que el endpoint de config de Fase 0 tenga un permiso propio
+# en vez de depender de "access content".
+'access utp nomenclaturas config':
+  title: 'Ver la configuración de nomenclaturas UTP'
+  description: 'Acceso de solo lectura al bundle de diccionario/UTM vía API.'
+  restrict access: false

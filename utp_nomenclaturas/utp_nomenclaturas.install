@@ -1,0 +1,34 @@
+<?php
+
+/**
+ * @file
+ * Install hooks para utp_nomenclaturas.
+ *
+ * Entity API no soporta unique keys multi-columna de forma nativa, así que
+ * se añaden a mano sobre las tablas base ya creadas por el entity system
+ * (Drupal instala el schema fieldable ANTES de invocar hook_install()).
+ */
+
+use Drupal\Core\Database\Database;
+
+/**
+ * Implements hook_install().
+ */
+function utp_nomenclaturas_install(): void {
+  $schema = Database::getConnection()->schema();
+
+  // Campaña: nombre único dentro del mismo pilar (ADR-002 / §3.3 del SDD).
+  if ($schema->tableExists('campaign') && !$schema->indexExists('campaign', 'uq_campaign_pillar_name')) {
+    $schema->addUniqueKey('campaign', 'uq_campaign_pillar_name', ['pillar_code', 'name']);
+  }
+
+  // Conjunto: nombre único dentro de la misma campaña.
+  if ($schema->tableExists('ad_set') && !$schema->indexExists('ad_set', 'uq_adset_campaign_name')) {
+    $schema->addUniqueKey('ad_set', 'uq_adset_campaign_name', ['campaign_id', 'name']);
+  }
+
+  // Anuncio: nombre único dentro del mismo conjunto.
+  if ($schema->tableExists('ad') && !$schema->indexExists('ad', 'uq_ad_adset_name')) {
+    $schema->addUniqueKey('ad', 'uq_ad_adset_name', ['ad_set_id', 'name']);
+  }
+}
