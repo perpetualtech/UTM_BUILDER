@@ -2,3 +2,19 @@ services:
   utp_nomenclaturas.dictionary_provider:
     class: Drupal\utp_nomenclaturas\Service\DictionaryProvider
     arguments: ['@config.factory']
+
+  utp_nomenclaturas.name_builder:
+    class: Drupal\utp_nomenclaturas\Service\NameBuilder
+
+  utp_nomenclaturas.tree_manager:
+    class: Drupal\utp_nomenclaturas\Service\TreeManager
+    arguments:
+      - '@entity_type.manager'
+      - '@utp_nomenclaturas.name_builder'
+      - '@utp_nomenclaturas.dictionary_provider'
+      - '@current_user'
+
+  utp_nomenclaturas.exception_subscriber:
+    class: Drupal\utp_nomenclaturas\EventSubscriber\UtpNomenclaturaExceptionSubscriber
+    tags:
+      - { name: event_subscriber }

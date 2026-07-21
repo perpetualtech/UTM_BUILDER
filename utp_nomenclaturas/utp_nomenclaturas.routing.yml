@@ -1,10 +1,131 @@
-# Contrato de API completo en §7 del SDD. En Fase 0 solo se expone /config
-# (sin auth/CSRF real todavía, eso llega en Fase 4) para poder ejercitar
-# DictionaryProvider end-to-end en el Kernel test.
+# Contrato de API completo en §7 del SDD. Sin auth/CSRF real todavía —
+# eso llega en Fase 4 (§9.5). GET usa el permiso de lectura, POST/PATCH/
+# DELETE el de escritura (§9.5 anticipa estos 2 nombres para no renombrar
+# después; falta "administer utp nomenclaturas config" para la matriz D4
+# editable de Fase 4).
+
 utp_nomenclaturas.config:
   path: '/api/utp-nomenclaturas/v1/config'
   defaults:
     _controller: '\Drupal\utp_nomenclaturas\Controller\UtmConfigController::getConfig'
   methods: [GET]
   requirements:
-    _permission: 'access utp nomenclaturas config'
+    _permission: 'access utp nomenclaturas'
+
+# ---- Campaign --------------------------------------------------------
+
+utp_nomenclaturas.campaigns_list:
+  path: '/api/utp-nomenclaturas/v1/campaigns'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::listCampaigns'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.campaign_create:
+  path: '/api/utp-nomenclaturas/v1/campaigns'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::createCampaign'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.campaign_get:
+  path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::getCampaignTree'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.campaign_update:
+  path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::updateCampaign'
+  methods: [PATCH]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.campaign_delete:
+  path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::deleteCampaign'
+  methods: [DELETE]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.campaign_duplicate:
+  path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}/duplicate'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::duplicateCampaign'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+# ---- Ad Set -----------------------------------------------------------
+
+utp_nomenclaturas.ad_set_create:
+  path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}/ad-sets'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::createAdSet'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.ad_set_update:
+  path: '/api/utp-nomenclaturas/v1/ad-sets/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::updateAdSet'
+  methods: [PATCH]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.ad_set_delete:
+  path: '/api/utp-nomenclaturas/v1/ad-sets/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::deleteAdSet'
+  methods: [DELETE]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.ad_set_duplicate:
+  path: '/api/utp-nomenclaturas/v1/ad-sets/{uuid}/duplicate'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::duplicateAdSet'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+# ---- Ad -----------------------------------------------------------------
+
+utp_nomenclaturas.ad_create:
+  path: '/api/utp-nomenclaturas/v1/ad-sets/{uuid}/ads'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::createAd'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.ad_update:
+  path: '/api/utp-nomenclaturas/v1/ads/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::updateAd'
+  methods: [PATCH]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.ad_delete:
+  path: '/api/utp-nomenclaturas/v1/ads/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::deleteAd'
+  methods: [DELETE]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.ad_duplicate:
+  path: '/api/utp-nomenclaturas/v1/ads/{uuid}/duplicate'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\TreeController::duplicateAd'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
