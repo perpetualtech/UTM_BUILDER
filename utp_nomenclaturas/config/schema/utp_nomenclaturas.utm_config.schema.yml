@@ -1,0 +1,11 @@
+# Schema para utp_nomenclaturas.utm_config (§3.4/§6 del SDD).
+utp_nomenclaturas.utm_config:
+  type: config_object
+  label: 'UTP Nomenclaturas — Config UTM'
+  mapping:
+    default_url:
+      type: string
+      label: 'URL de destino por defecto (si el anuncio no tiene URL propia)'
+    meta_mode:
+      type: string
+      label: 'Modo de campaign/term/content para Meta/Tiktok: macro|hard'

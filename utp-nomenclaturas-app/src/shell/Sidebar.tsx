@@ -2,14 +2,16 @@ import { NavLink } from "react-router-dom";
 import { cn } from "@/modules/core/lib/utils";
 
 /**
- * §8.2 del SDD: Shell → Sidebar. Solo 3 vistas existen en Fase 2
- * (Dashboard/Builder/Repository) — UTM/Export/Config/Dictionary llegan en
- * fases posteriores y se agregan acá recién cuando tengan una ruta real.
+ * §8.2 del SDD: Shell → Sidebar. 5 vistas: Fase 2 (Dashboard/Builder/
+ * Repository) + Fase 3 (UTM/Export). Config/Dictionary llegan en Fase 4 y
+ * se agregan acá recién cuando tengan una ruta real.
  */
 const NAV_ITEMS = [
   { to: "/", label: "Inicio" },
   { to: "/builder", label: "Constructor" },
   { to: "/repository", label: "Repositorio" },
+  { to: "/utm", label: "UTMs" },
+  { to: "/export", label: "Exportar" },
 ];
 
 export function Sidebar() {

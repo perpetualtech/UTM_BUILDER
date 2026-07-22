@@ -5,8 +5,21 @@ import {
   isFacultadValidForUbicacion,
   isValidPilarSegmentoCombination,
 } from "@/modules/core/lib/dictionaryRules";
+import { deriveUtm } from "@/modules/core/lib/utmDeriver";
 import { seedDictionary } from "@/modules/core/mocks/seedDictionary";
-import type { Ad, AdMeta, AdSet, AdSetMeta, Campaign, CampaignMeta } from "@/modules/core/types/api";
+import type {
+  Ad,
+  AdMeta,
+  AdSet,
+  AdSetMeta,
+  Campaign,
+  CampaignMeta,
+  ImportSummary,
+  ManualUtm,
+  ManualUtmInput,
+  PaidUtmRow,
+  UtmConfig,
+} from "@/modules/core/types/api";
 
 /**
  * Store en memoria para los mocks de MSW — reproduce el comportamiento de
@@ -39,10 +52,16 @@ export class MockApiError extends Error {
 
 let nextId = 1;
 let campaigns: StoredCampaign[] = [];
+let utmConfig: UtmConfig = { default_url: "", meta_mode: "macro" };
+let manualUtms: ManualUtm[] = [];
+let nextManualUtmId = 1;
 
 export function resetStore(): void {
   campaigns = [];
   nextId = 1;
+  utmConfig = { default_url: "", meta_mode: "macro" };
+  manualUtms = [];
+  nextManualUtmId = 1;
 }
 
 function fail(status: number, code: string, message: string, details: Record<string, unknown> = {}): never {
@@ -171,6 +190,38 @@ export function listCampaigns(filters: { pillar?: string; medio?: string; q?: st
 
 export function getCampaignByUuid(uuid: string): StoredCampaign | undefined {
   return campaigns.find((c) => c.uuid === uuid);
+}
+
+export interface ExportCampaignTree {
+  name: string;
+  medio: string;
+  tipo_camp: string;
+  ad_sets: Array<{ name: string; ads: Array<{ name: string; url: string }> }>;
+}
+
+/**
+ * Árbol completo (nombre + medio/tipo_camp + hijos) para el Excel de
+ * nomenclaturas — equivalente a `getExportFiltered()`/`exportSelected` del
+ * HTML: si `uuids` viene, fija la selección explícita; si no, aplica los
+ * mismos filtros que `listCampaigns()`.
+ */
+export function campaignsForExport(filters: { pillar?: string; medio?: string; q?: string; uuids?: string[] }): ExportCampaignTree[] {
+  const selected = filters.uuids?.length
+    ? campaigns.filter((c) => filters.uuids!.includes(c.uuid))
+    : campaigns
+        .filter((c) => !filters.pillar || c.pillar_code === filters.pillar)
+        .filter((c) => !filters.medio || c.meta.medio === filters.medio)
+        .filter((c) => !filters.q || c.name.toLowerCase().includes(filters.q!.toLowerCase()));
+
+  return selected.map((c) => ({
+    name: c.name,
+    medio: c.meta.medio,
+    tipo_camp: c.meta.tipo_camp,
+    ad_sets: c.ad_sets.map((g) => ({
+      name: g.name,
+      ads: g.ads.map((a) => ({ name: a.name, url: a.url ?? "" })),
+    })),
+  }));
 }
 
 export function createCampaign(payload: { pillar_code?: string; meta?: Partial<CampaignMeta> }): StoredCampaign {
@@ -508,4 +559,276 @@ export function duplicateAd(uuid: string): StoredAd {
   const copy: StoredAd = { ...ad, id: nextId++, uuid: crypto.randomUUID(), name };
   adSet.ads.push(copy);
   return copy;
+}
+
+// ---- UTM config (Fase 3, §3.4) -------------------------------------------
+
+export function getUtmConfig(): UtmConfig {
+  return utmConfig;
+}
+
+export function updateUtmConfig(payload: Partial<UtmConfig>): UtmConfig {
+  const metaMode = payload.meta_mode ?? "macro";
+  if (metaMode !== "macro" && metaMode !== "hard") {
+    fail(422, "VALIDATION_FAILED", "meta_mode debe ser 'macro' o 'hard'.", {
+      violations: [{ field: "meta_mode", reason: `Valor '${metaMode}' inválido.` }],
+    });
+  }
+  utmConfig = { default_url: payload.default_url ?? "", meta_mode: metaMode };
+  return utmConfig;
+}
+
+// ---- UTM paid — derivadas (Fase 3, §3.4) ---------------------------------
+
+/** Equivalente a `flattenPaid()` del HTML — mismo filtrado client-side. */
+export function flattenPaidUtms(): PaidUtmRow[] {
+  const rows: PaidUtmRow[] = [];
+  for (const campaign of campaigns) {
+    for (const adSet of campaign.ad_sets) {
+      for (const ad of adSet.ads) {
+        const derived = deriveUtm(seedDictionary, {
+          medio: campaign.meta.medio,
+          tipo_camp: campaign.meta.tipo_camp,
+          campaign_name: campaign.name,
+          ad_set_name: adSet.name,
+          ad_name: ad.name,
+          ad_url: ad.url,
+          meta_mode: utmConfig.meta_mode,
+          default_url: utmConfig.default_url,
+        });
+        if (!derived) continue;
+        rows.push({
+          ...derived,
+          ad_uuid: ad.uuid,
+          ad_set_uuid: adSet.uuid,
+          campaign_uuid: campaign.uuid,
+          campaign_name: campaign.name,
+          ad_set_name: adSet.name,
+          ad_name: ad.name,
+          pillar_code: campaign.pillar_code,
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+// ---- UTM manual (Fase 3, §3.4/§2.1) --------------------------------------
+
+export function listManualUtms(): ManualUtm[] {
+  // Más reciente primero, igual que `utmStore.unshift()` en el HTML.
+  return [...manualUtms].sort((a, b) => b.id - a.id);
+}
+
+export function createManualUtm(payload: Partial<ManualUtmInput>): ManualUtm {
+  const violations: Array<{ field: string; reason: string }> = [];
+  for (const field of ["utm_source", "utm_medium", "url", "qs"] as const) {
+    if (!payload[field]?.trim()) {
+      violations.push({ field, reason: "Requerido" });
+    }
+  }
+  if (violations.length) {
+    fail(422, "VALIDATION_FAILED", "source, medium, URL y query string son obligatorios.", { violations });
+  }
+
+  const utm: ManualUtm = {
+    id: nextManualUtmId++,
+    uuid: crypto.randomUUID(),
+    utm_source: payload.utm_source!.trim(),
+    utm_medium: payload.utm_medium!.trim(),
+    utm_campaign: payload.utm_campaign?.trim() ?? "",
+    utm_term: payload.utm_term?.trim() ?? "",
+    utm_content: payload.utm_content?.trim() ?? "",
+    url: payload.url!.trim(),
+    qs: payload.qs!,
+    created: Date.now(),
+  };
+  manualUtms.push(utm);
+  return utm;
+}
+
+export function deleteManualUtm(uuid: string): void {
+  const index = manualUtms.findIndex((u) => u.uuid === uuid);
+  if (index === -1) fail(404, "NOT_FOUND", "No encontrado.");
+  manualUtms.splice(index, 1);
+}
+
+// ---- Backup / import (Fase 3, §3.5/§10) ----------------------------------
+
+interface BackupCampaign {
+  uuid?: string;
+  pillar?: string;
+  pillar_code?: string;
+  name: string;
+  meta?: Partial<CampaignMeta>;
+  ad_sets?: BackupAdSet[];
+  groups?: BackupAdSet[];
+}
+interface BackupAdSet {
+  uuid?: string;
+  name: string;
+  meta?: Partial<AdSetMeta>;
+  ads?: BackupAd[];
+}
+interface BackupAd {
+  uuid?: string;
+  name: string;
+  url?: string;
+  meta?: Partial<AdMeta> & { url?: string };
+}
+
+/** Shape canónico (uuid-based) — mismo que BackupService::export() (PHP). */
+export function exportBackup(): BackupCampaign[] {
+  return campaigns.map((c) => ({
+    uuid: c.uuid,
+    pillar_code: c.pillar_code,
+    name: c.name,
+    meta: c.meta,
+    ad_sets: c.ad_sets.map((g) => ({
+      uuid: g.uuid,
+      name: g.name,
+      meta: g.meta,
+      ads: g.ads.map((a) => ({ uuid: a.uuid, name: a.name, url: a.url ?? "", meta: a.meta })),
+    })),
+  }));
+}
+
+/**
+ * Acepta el shape canónico o el legacy del HTML (`groups`, `meta.url`) —
+ * mismo comportamiento que BackupService::import() (PHP): idempotente por
+ * uuid, sin uuid → crea si no colisiona nombre, si colisiona se omite.
+ */
+export function importBackup(data: BackupCampaign[]): ImportSummary {
+  const summary: ImportSummary = { created: 0, updated: 0, skipped: 0, errors: [] };
+  for (const item of data) {
+    importBackupCampaign(item, summary);
+  }
+  return summary;
+}
+
+function importBackupCampaign(item: BackupCampaign, summary: ImportSummary): void {
+  const pillarCode = (item.pillar_code ?? item.pillar ?? "").trim();
+  const name = (item.name ?? "").trim();
+  const uuid = item.uuid;
+
+  if (!pillarCode || !name) {
+    summary.skipped++;
+    summary.errors.push(`Campaña sin pillar_code/name válido (uuid: ${uuid ?? "—"}).`);
+    return;
+  }
+
+  const meta: CampaignMeta = {
+    segmento: item.meta?.segmento ?? "",
+    etapa: item.meta?.etapa ?? "",
+    campus: item.meta?.campus ?? "",
+    medio: item.meta?.medio ?? "",
+    obj_camp: item.meta?.obj_camp ?? "",
+    obj_plat: item.meta?.obj_plat ?? "",
+    tipo_camp: item.meta?.tipo_camp ?? "",
+  };
+
+  let campaign = uuid ? getCampaignByUuid(uuid) : undefined;
+  if (campaign) {
+    campaign.pillar_code = pillarCode;
+    campaign.name = name;
+    campaign.meta = meta;
+    summary.updated++;
+  } else {
+    if (campaigns.some((c) => c.pillar_code === pillarCode && c.name === name)) {
+      summary.skipped++;
+      summary.errors.push(`Campaña '${name}' (pilar '${pillarCode}') ya existe con otro uuid — se omite.`);
+      return;
+    }
+    campaign = {
+      id: nextId++,
+      uuid: uuid ?? crypto.randomUUID(),
+      pillar_code: pillarCode,
+      name,
+      meta,
+      ad_sets: [],
+    };
+    campaigns.push(campaign);
+    summary.created++;
+  }
+
+  for (const adSetItem of item.ad_sets ?? item.groups ?? []) {
+    importBackupAdSet(adSetItem, campaign, summary);
+  }
+}
+
+function importBackupAdSet(item: BackupAdSet, campaign: StoredCampaign, summary: ImportSummary): void {
+  const name = (item.name ?? "").trim();
+  const uuid = item.uuid;
+  if (!name) {
+    summary.skipped++;
+    summary.errors.push(`Conjunto sin name válido bajo campaña '${campaign.name}'.`);
+    return;
+  }
+
+  const meta: AdSetMeta = {
+    edad: item.meta?.edad ?? "",
+    ubicacion: item.meta?.ubicacion ?? "",
+    facultad: item.meta?.facultad ?? "",
+    senal: item.meta?.senal ?? "",
+    detalle: item.meta?.detalle ?? "",
+  };
+
+  let adSet = uuid ? campaign.ad_sets.find((g) => g.uuid === uuid) : undefined;
+  if (adSet) {
+    adSet.name = name;
+    adSet.meta = meta;
+    summary.updated++;
+  } else {
+    if (campaign.ad_sets.some((g) => g.name === name)) {
+      summary.skipped++;
+      summary.errors.push(`Conjunto '${name}' ya existe en esta campaña con otro uuid — se omite.`);
+      return;
+    }
+    adSet = { id: nextId++, uuid: uuid ?? crypto.randomUUID(), campaign_id: campaign.id, name, meta, ads: [] };
+    campaign.ad_sets.push(adSet);
+    summary.created++;
+  }
+
+  for (const adItem of item.ads ?? []) {
+    importBackupAd(adItem, adSet, summary);
+  }
+}
+
+function importBackupAd(item: BackupAd, adSet: StoredAdSet, summary: ImportSummary): void {
+  const name = (item.name ?? "").trim();
+  const uuid = item.uuid;
+  if (!name) {
+    summary.skipped++;
+    summary.errors.push(`Anuncio sin name válido bajo conjunto '${adSet.name}'.`);
+    return;
+  }
+
+  // El HTML legacy guarda la URL bajo `meta.url`; el shape canónico la
+  // tiene como campo propio `url`.
+  const url = (item.url ?? item.meta?.url ?? "").trim();
+  const meta: AdMeta = {
+    formato: item.meta?.formato ?? "",
+    concepto: item.meta?.concepto ?? "",
+    motivo: item.meta?.motivo ?? "",
+    mensaje: item.meta?.mensaje ?? "",
+    carrera: item.meta?.carrera ?? "",
+    fecha: item.meta?.fecha ?? "",
+  };
+
+  const existing = uuid ? adSet.ads.find((a) => a.uuid === uuid) : undefined;
+  if (existing) {
+    existing.name = name;
+    existing.url = url;
+    existing.meta = meta;
+    summary.updated++;
+    return;
+  }
+
+  if (adSet.ads.some((a) => a.name === name)) {
+    summary.skipped++;
+    summary.errors.push(`Anuncio '${name}' ya existe en este conjunto con otro uuid — se omite.`);
+    return;
+  }
+  adSet.ads.push({ id: nextId++, uuid: uuid ?? crypto.randomUUID(), name, url, meta });
+  summary.created++;
 }

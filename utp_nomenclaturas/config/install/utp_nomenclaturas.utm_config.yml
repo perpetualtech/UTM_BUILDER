@@ -1,0 +1,5 @@
+# Config global de UTM (§3.4/§6 del SDD) — equivalente a UTM_CONFIG del ER
+# de §6.1, modelado como Configuration API (singleton) en vez de entidad,
+# igual que utp_nomenclaturas.dictionary/utm_presets (patrón de Fase 0).
+default_url: ''
+meta_mode: macro

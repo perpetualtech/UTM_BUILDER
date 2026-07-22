@@ -38,14 +38,18 @@ export interface AdNameFields {
   fecha?: string;
 }
 
+/** NFD + strip de marcas diacríticas — compartido con utmClean.ts (§3.4). */
+export function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/\p{Mn}/gu, "");
+}
+
 /** slug(v) — §3.1: trim, NFD + strip de diacríticos, espacios → "-". */
 export function slug(value: string | null | undefined): string {
   const trimmed = (value ?? "").trim();
   if (trimmed === "") {
     return "";
   }
-  const withoutDiacritics = trimmed.normalize("NFD").replace(/\p{Mn}/gu, "");
-  return withoutDiacritics.replace(/\s+/g, "-");
+  return stripDiacritics(trimmed).replace(/\s+/g, "-");
 }
 
 function slugOrderedFields(

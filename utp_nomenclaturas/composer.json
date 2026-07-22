@@ -1,0 +1,9 @@
+{
+    "name": "utp/utp-nomenclaturas",
+    "description": "Constructor de nomenclaturas de campaña y derivación de UTMs para UTP.",
+    "type": "drupal-module",
+    "require": {
+        "php": ">=8.1",
+        "phpoffice/phpspreadsheet": "^2.0"
+    }
+}

@@ -37,3 +37,32 @@ export const http = {
     request<T>(path, { method: "PATCH", body: data ? JSON.stringify(data) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
+
+/**
+ * Descarga un archivo (Excel/backup JSON) — `http.get()` no sirve porque
+ * siempre parsea el body como JSON; acá el body es binario (o JSON servido
+ * como adjunto). Lee el filename de `Content-Disposition` cuando está.
+ */
+export async function fetchFile(path: string): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`${API_BASE}${path}`);
+
+  if (!response.ok) {
+    const body = (await response.json()) as ApiErrorBody;
+    throw new ApiError(response.status, body);
+  }
+
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+
+  return { blob: await response.blob(), filename: match?.[1] ?? "download" };
+}
+
+/** Dispara la descarga de un Blob en el navegador — sin dependencias extra. */
+export function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}

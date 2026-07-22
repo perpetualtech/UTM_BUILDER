@@ -107,6 +107,67 @@ export interface CampaignTree extends Campaign {
   ad_sets?: AdSet[];
 }
 
+/** Shape de UtmController::getUtmConfig/updateUtmConfig (Fase 3). */
+export interface UtmConfig {
+  default_url: string;
+  meta_mode: "macro" | "hard";
+}
+
+/** Fila derivada — shape de UtmController::listPaid (Fase 3, §3.4). */
+export interface PaidUtmRow {
+  plat: string;
+  source: string;
+  medium: string;
+  campaign: string;
+  term: string;
+  content: string;
+  params: string;
+  url: string;
+  full: string;
+  sep: boolean;
+  where: string;
+  ga4: string;
+  ad_uuid: string;
+  ad_set_uuid: string;
+  campaign_uuid: string;
+  campaign_name: string;
+  ad_set_name: string;
+  ad_name: string;
+  pillar_code: string;
+}
+
+/** Shape de UtmController::manualUtmToArray (Fase 3). */
+export interface ManualUtm {
+  id: number;
+  uuid: string;
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign: string;
+  utm_term: string;
+  utm_content: string;
+  url: string;
+  qs: string;
+  created: number;
+}
+
+export interface ManualUtmInput {
+  utm_source: string;
+  utm_medium: string;
+  utm_campaign?: string;
+  utm_term?: string;
+  utm_content?: string;
+  url: string;
+  qs: string;
+}
+
+/** Shape de ExportController::importBackup / BackupService::import (Fase 3). */
+export interface ImportSummary {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
+}
+
 /** Forma exacta de los errores del backend (§7 del SDD). */
 export interface ApiErrorBody {
   error: string;

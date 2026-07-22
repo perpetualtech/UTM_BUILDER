@@ -129,3 +129,87 @@ utp_nomenclaturas.ad_duplicate:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+
+# ---- UTM (Fase 3, §3.4/§7.3 del SDD) -----------------------------------
+
+utp_nomenclaturas.utms_paid:
+  path: '/api/utp-nomenclaturas/v1/utms/paid'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\UtmController::listPaid'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.utms_config_get:
+  path: '/api/utp-nomenclaturas/v1/utms/config'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\UtmController::getUtmConfig'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.utms_config_update:
+  path: '/api/utp-nomenclaturas/v1/utms/config'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\UtmController::updateUtmConfig'
+  methods: [PATCH]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.utms_manual_list:
+  path: '/api/utp-nomenclaturas/v1/utms/manual'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\UtmController::listManual'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.utms_manual_create:
+  path: '/api/utp-nomenclaturas/v1/utms/manual'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\UtmController::createManual'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+utp_nomenclaturas.utms_manual_delete:
+  path: '/api/utp-nomenclaturas/v1/utms/manual/{uuid}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\UtmController::deleteManual'
+  methods: [DELETE]
+  requirements:
+    _permission: 'edit utp nomenclaturas'
+
+# ---- Export / Import (Fase 3, §3.5/§9.4/§10 del SDD) -------------------
+
+utp_nomenclaturas.export_campaigns:
+  path: '/api/utp-nomenclaturas/v1/export/campaigns.xlsx'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ExportController::exportCampaigns'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.export_utms:
+  path: '/api/utp-nomenclaturas/v1/export/utms.xlsx'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ExportController::exportUtms'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.export_backup:
+  path: '/api/utp-nomenclaturas/v1/export/backup.json'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ExportController::exportBackup'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.import:
+  path: '/api/utp-nomenclaturas/v1/import'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ExportController::importBackup'
+  methods: [POST]
+  requirements:
+    _permission: 'edit utp nomenclaturas'

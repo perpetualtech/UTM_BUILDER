@@ -18,3 +18,18 @@ services:
     class: Drupal\utp_nomenclaturas\EventSubscriber\UtpNomenclaturaExceptionSubscriber
     tags:
       - { name: event_subscriber }
+
+  utp_nomenclaturas.utm_deriver:
+    class: Drupal\utp_nomenclaturas\Service\UtmDeriver
+    arguments:
+      - '@utp_nomenclaturas.dictionary_provider'
+
+  utp_nomenclaturas.excel_exporter:
+    class: Drupal\utp_nomenclaturas\Service\ExcelExporter
+    arguments:
+      - '@utp_nomenclaturas.utm_deriver'
+
+  utp_nomenclaturas.backup_service:
+    class: Drupal\utp_nomenclaturas\Service\BackupService
+    arguments:
+      - '@entity_type.manager'
