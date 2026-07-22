@@ -11,4 +11,9 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // AppController.php lee dist/.vite/manifest.json para montar la SPA
+    // en Drupal con los nombres de archivo hasheados reales.
+    manifest: true,
+  },
 })
