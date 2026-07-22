@@ -173,11 +173,31 @@ class ExcelExporter {
     $sheet = $workbook->addSheet(new \PhpOffice\PhpSpreadsheet\Worksheet\Worksheet($workbook, mb_substr($title, 0, 31)));
     $sheet->fromArray($headers, NULL, 'A1');
     if ($rows) {
-      $sheet->fromArray($rows, NULL, 'A2');
+      $sheet->fromArray(array_map([self::class, 'sanitizeRow'], $rows), NULL, 'A2');
     }
     foreach (array_values($widths) as $i => $width) {
       $sheet->getColumnDimensionByColumn($i + 1)->setWidth($width);
     }
+  }
+
+  /**
+   * Neutraliza inyección de fórmulas (CWE-1236): nombres de campaña/conjunto/
+   * anuncio y URLs son texto libre (incluido el override manual de nombre,
+   * Fase 2), así que un valor que empiece con =, +, -, @ o tab se antepone
+   * con un apóstrofe para que Excel/Sheets lo trate como texto literal, no
+   * como fórmula, al abrir el archivo.
+   *
+   * @param array<int, string> $row
+   *
+   * @return array<int, string>
+   */
+  private static function sanitizeRow(array $row): array {
+    return array_map(static function ($value) {
+      if (is_string($value) && $value !== '' && str_contains("=+-@\t\r", $value[0])) {
+        return "'" . $value;
+      }
+      return $value;
+    }, $row);
   }
 
 }

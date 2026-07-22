@@ -28,6 +28,18 @@ const API_BASE = "/api/utp-nomenclaturas/v1";
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const PLATFORMS = ["Meta", "Tiktok", "DV360", "LinkedIn", "GoogleAds"];
 
+/**
+ * Neutraliza inyección de fórmulas (CWE-1236) en el mismo punto que
+ * ExcelExporter.php del backend real: nombres de campaña/conjunto/anuncio
+ * son texto libre (incluido el override manual de nombre), así que un
+ * valor que empiece con =, +, -, @ o tab se antepone con un apóstrofe.
+ */
+function sanitizeRow(row: unknown[]): unknown[] {
+  return row.map((value) =>
+    typeof value === "string" && value !== "" && "=+-@\t\r".includes(value[0]) ? `'${value}` : value,
+  );
+}
+
 async function buildCampaignsWorkbook(tree: ExportCampaignTree[]): Promise<ExcelJS.Buffer> {
   const utmConfig = getUtmConfig();
   const headers = ["Medio", "Nombre de Campaña", "Conjunto de Anuncios", "Anuncio", "URL de destino", "Parámetros UTM (copiar/pegar)", "Dónde pegar"];
@@ -44,13 +56,13 @@ async function buildCampaignsWorkbook(tree: ExportCampaignTree[]): Promise<Excel
     for (const campaign of campaigns) {
       let firstCamp = true;
       if (!campaign.ad_sets.length) {
-        sheet.addRow([plat, campaign.name, "", "", "", "", ""]);
+        sheet.addRow(sanitizeRow([plat, campaign.name, "", "", "", "", ""]));
         continue;
       }
       for (const adSet of campaign.ad_sets) {
         let firstGroup = true;
         if (!adSet.ads.length) {
-          sheet.addRow([plat, firstCamp ? campaign.name : "", adSet.name, "", "", "", ""]);
+          sheet.addRow(sanitizeRow([plat, firstCamp ? campaign.name : "", adSet.name, "", "", "", ""]));
           firstCamp = false;
           continue;
         }
@@ -65,7 +77,7 @@ async function buildCampaignsWorkbook(tree: ExportCampaignTree[]): Promise<Excel
             meta_mode: utmConfig.meta_mode,
             default_url: utmConfig.default_url,
           });
-          sheet.addRow([
+          sheet.addRow(sanitizeRow([
             plat,
             firstCamp ? campaign.name : "",
             firstGroup ? adSet.name : "",
@@ -73,7 +85,7 @@ async function buildCampaignsWorkbook(tree: ExportCampaignTree[]): Promise<Excel
             derived?.url ?? "",
             derived?.params ?? "",
             derived?.where ?? "",
-          ]);
+          ]));
           firstCamp = false;
           firstGroup = false;
         }
@@ -105,11 +117,11 @@ async function buildUtmsWorkbook(): Promise<ExcelJS.Buffer> {
   for (const source of sources) {
     const sheet = workbook.addWorksheet(source.slice(0, 31));
     sheet.columns = headers.map((header, i) => ({ header, width: widths[i] }));
-    rowsAll.filter((r) => r[5] === source).forEach((r) => sheet.addRow(r));
+    rowsAll.filter((r) => r[5] === source).forEach((r) => sheet.addRow(sanitizeRow(r)));
   }
   const consolidado = workbook.addWorksheet("Consolidado");
   consolidado.columns = headers.map((header, i) => ({ header, width: widths[i] }));
-  rowsAll.forEach((r) => consolidado.addRow(r));
+  rowsAll.forEach((r) => consolidado.addRow(sanitizeRow(r)));
 
   return workbook.xlsx.writeBuffer();
 }
