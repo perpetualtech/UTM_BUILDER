@@ -14,12 +14,20 @@ import type {
   AdSetMeta,
   Campaign,
   CampaignMeta,
+  DictBundle,
   ImportSummary,
   ManualUtm,
   ManualUtmInput,
   PaidUtmRow,
   UtmConfig,
 } from "@/modules/core/types/api";
+
+/**
+ * Listas planas editables vía Config Nivel 1/3 (Fase 4, §7.1) — igual que
+ * `DictionaryProvider::EDITABLE_LISTS` (PHP). `etapa`/`ubicacion`/
+ * `facultad`/`detalle` no se editan por este endpoint genérico.
+ */
+const EDITABLE_LISTS = ["segmento", "campus", "edad", "senal", "formato", "nombre", "motivo", "mensaje", "carrera", "fecha"] as const;
 
 /**
  * Store en memoria para los mocks de MSW — reproduce el comportamiento de
@@ -55,6 +63,10 @@ let campaigns: StoredCampaign[] = [];
 let utmConfig: UtmConfig = { default_url: "", meta_mode: "macro" };
 let manualUtms: ManualUtm[] = [];
 let nextManualUtmId = 1;
+// Fase 4: el diccionario deja de ser una constante congelada — Config
+// Nivel 1/2/3 lo muta en memoria, igual que `utp_nomenclaturas.dictionary`
+// (config editable) en el backend real.
+let dictionary: DictBundle = structuredClone(seedDictionary);
 
 export function resetStore(): void {
   campaigns = [];
@@ -62,6 +74,7 @@ export function resetStore(): void {
   utmConfig = { default_url: "", meta_mode: "macro" };
   manualUtms = [];
   nextManualUtmId = 1;
+  dictionary = structuredClone(seedDictionary);
 }
 
 function fail(status: number, code: string, message: string, details: Record<string, unknown> = {}): never {
@@ -92,10 +105,10 @@ function validateCampaignFields(meta: CampaignMeta, pillarCode: string): void {
   if (!meta.segmento) {
     conditionalViolation("D2", "segmento es requerido para validar el pilar.", "segmento", "Requerido");
   }
-  if (!codeExistsInList(seedDictionary, "segmento", meta.segmento)) {
+  if (!codeExistsInList(dictionary, "segmento", meta.segmento)) {
     validationFailed("segmento", `Valor '${meta.segmento}' no existe en la lista 'segmento'.`);
   }
-  if (!isValidPilarSegmentoCombination(seedDictionary, pillarCode, meta.segmento)) {
+  if (!isValidPilarSegmentoCombination(dictionary, pillarCode, meta.segmento)) {
     conditionalViolation(
       "D2",
       `El pilar '${pillarCode}' no es válido para segmento='${meta.segmento}'.`,
@@ -105,7 +118,7 @@ function validateCampaignFields(meta: CampaignMeta, pillarCode: string): void {
   }
 
   for (const field of ["etapa", "campus"] as const) {
-    if (meta[field] && !codeExistsInList(seedDictionary, field, meta[field])) {
+    if (meta[field] && !codeExistsInList(dictionary, field, meta[field])) {
       validationFailed(field, `Valor '${meta[field]}' no existe en la lista '${field}'.`);
     }
   }
@@ -118,7 +131,7 @@ function validateCampaignFields(meta: CampaignMeta, pillarCode: string): void {
     if (!meta.etapa) {
       conditionalViolation("D1", `'${entityField}' requiere una etapa seleccionada.`, entityField, "etapa no seleccionada");
     }
-    const allowed = getOptionsForEtapa(seedDictionary, meta.etapa, configField);
+    const allowed = getOptionsForEtapa(dictionary, meta.etapa, configField);
     if (!allowed.includes(value)) {
       conditionalViolation(
         "D1",
@@ -132,15 +145,15 @@ function validateCampaignFields(meta: CampaignMeta, pillarCode: string): void {
 
 function validateAdSetFields(meta: AdSetMeta): void {
   for (const field of ["edad", "ubicacion", "senal"] as const) {
-    if (meta[field] && !codeExistsInList(seedDictionary, field, meta[field])) {
+    if (meta[field] && !codeExistsInList(dictionary, field, meta[field])) {
       validationFailed(field, `Valor '${meta[field]}' no existe en la lista '${field}'.`);
     }
   }
   if (meta.facultad) {
-    if (!codeExistsInList(seedDictionary, "facultad", meta.facultad)) {
+    if (!codeExistsInList(dictionary, "facultad", meta.facultad)) {
       validationFailed("facultad", `Valor '${meta.facultad}' no existe en la lista 'facultad'.`);
     }
-    if (meta.ubicacion && !isFacultadValidForUbicacion(seedDictionary, meta.facultad, meta.ubicacion)) {
+    if (meta.ubicacion && !isFacultadValidForUbicacion(dictionary, meta.facultad, meta.ubicacion)) {
       conditionalViolation(
         "D3",
         `facultad '${meta.facultad}' no está disponible para ubicacion='${meta.ubicacion}'.`,
@@ -153,11 +166,11 @@ function validateAdSetFields(meta: AdSetMeta): void {
 
 function validateAdFields(meta: AdMeta): void {
   for (const field of ["formato", "motivo", "carrera", "fecha"] as const) {
-    if (meta[field] && !codeExistsInList(seedDictionary, field, meta[field])) {
+    if (meta[field] && !codeExistsInList(dictionary, field, meta[field])) {
       validationFailed(field, `Valor '${meta[field]}' no existe en la lista '${field}'.`);
     }
   }
-  if (meta.concepto && !codeExistsInList(seedDictionary, "nombre", meta.concepto)) {
+  if (meta.concepto && !codeExistsInList(dictionary, "nombre", meta.concepto)) {
     validationFailed("concepto", `Valor '${meta.concepto}' no existe en la lista 'nombre'.`);
   }
 }
@@ -586,7 +599,7 @@ export function flattenPaidUtms(): PaidUtmRow[] {
   for (const campaign of campaigns) {
     for (const adSet of campaign.ad_sets) {
       for (const ad of adSet.ads) {
-        const derived = deriveUtm(seedDictionary, {
+        const derived = deriveUtm(dictionary, {
           medio: campaign.meta.medio,
           tipo_camp: campaign.meta.tipo_camp,
           campaign_name: campaign.name,
@@ -831,4 +844,73 @@ function importBackupAd(item: BackupAd, adSet: StoredAdSet, summary: ImportSumma
   }
   adSet.ads.push({ id: nextId++, uuid: uuid ?? crypto.randomUUID(), name, url, meta });
   summary.created++;
+}
+
+// ---- Config Nivel 1/2/3 (Fase 4, §7.1) -----------------------------------
+
+/** Bundle actual (mutable) — usado por GET /config y por el export de Excel. */
+export function getDictionary(): DictBundle {
+  return dictionary;
+}
+
+type EditableListKey = (typeof EDITABLE_LISTS)[number];
+
+function assertEditableList(listKey: string): asserts listKey is EditableListKey {
+  if (!(EDITABLE_LISTS as readonly string[]).includes(listKey)) {
+    fail(422, "VALIDATION_FAILED", `'${listKey}' no es una lista editable.`, {
+      violations: [{ field: "list_key", reason: `Válidas: ${EDITABLE_LISTS.join(", ")}` }],
+    });
+  }
+}
+
+export function addListValue(listKey: string, value: string): void {
+  assertEditableList(listKey);
+  const values = dictionary.lists[listKey];
+  if (values.includes(value)) {
+    fail(409, "DUPLICATE_NAME", `valor '${value}' ya existe dentro de la lista '${listKey}'.`, {
+      entity_type: "valor",
+      name: value,
+      uniqueness_scope: `la lista '${listKey}'`,
+    });
+  }
+  values.push(value);
+}
+
+/** @returns true si el valor existía y se quitó; false si no existía (DELETE idempotente). */
+export function deleteListValue(listKey: string, value: string): boolean {
+  assertEditableList(listKey);
+  const values = dictionary.lists[listKey];
+  if (!values.includes(value)) {
+    return false;
+  }
+  dictionary.lists[listKey] = values.filter((v) => v !== value);
+  return true;
+}
+
+export function updateEtapaOptions(etapa: string, field: "medio" | "objCamp" | "objPlat" | "tipoCamp", values: string[]): void {
+  dictionary.etapa_conditionals[field][etapa] = [...values];
+}
+
+export function updateSegmentoPilar(segmento: string, pilares: string[]): void {
+  dictionary.segmento_pilar[segmento] = [...pilares];
+}
+
+/**
+ * D4: reemplaza la matriz completa, normalizando igual que
+ * `DictionaryProvider::updateCampusFacultad()` (PHP) — una facultad
+ * ofrecida en TODAS las `sedes_especificas` pierde su restricción.
+ */
+export function updateCampusFacultad(matrix: Record<string, string[]>): void {
+  const sedesEspecificas = dictionary.sedes_especificas;
+  const normalized: Record<string, string[]> = {};
+
+  for (const [facultad, sedes] of Object.entries(matrix)) {
+    const uniqueSedes = Array.from(new Set(sedes));
+    const coversAll = sedesEspecificas.every((sede) => uniqueSedes.includes(sede));
+    if (!coversAll) {
+      normalized[facultad] = uniqueSedes;
+    }
+  }
+
+  dictionary.campus_facultad = normalized;
 }

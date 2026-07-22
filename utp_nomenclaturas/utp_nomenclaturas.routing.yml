@@ -1,8 +1,9 @@
-# Contrato de API completo en §7 del SDD. Sin auth/CSRF real todavía —
-# eso llega en Fase 4 (§9.5). GET usa el permiso de lectura, POST/PATCH/
-# DELETE el de escritura (§9.5 anticipa estos 2 nombres para no renombrar
-# después; falta "administer utp nomenclaturas config" para la matriz D4
-# editable de Fase 4).
+# Contrato de API completo en §7 del SDD. Permisos + CSRF reales desde
+# Fase 4 (§9.5): GET usa 'access utp nomenclaturas'; mutaciones del árbol/
+# UTM/export usan 'edit utp nomenclaturas'; mutaciones de Config (listas,
+# condicionales, matriz D4) usan 'administer utp nomenclaturas config'.
+# Toda ruta no-GET exige `_csrf_request_header_token: 'TRUE'` (header
+# `X-CSRF-Token`, ver AppController/http.ts).
 
 utp_nomenclaturas.config:
   path: '/api/utp-nomenclaturas/v1/config'
@@ -29,6 +30,7 @@ utp_nomenclaturas.campaign_create:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.campaign_get:
   path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}'
@@ -45,6 +47,7 @@ utp_nomenclaturas.campaign_update:
   methods: [PATCH]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.campaign_delete:
   path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}'
@@ -53,6 +56,7 @@ utp_nomenclaturas.campaign_delete:
   methods: [DELETE]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.campaign_duplicate:
   path: '/api/utp-nomenclaturas/v1/campaigns/{uuid}/duplicate'
@@ -61,6 +65,7 @@ utp_nomenclaturas.campaign_duplicate:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 # ---- Ad Set -----------------------------------------------------------
 
@@ -71,6 +76,7 @@ utp_nomenclaturas.ad_set_create:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.ad_set_update:
   path: '/api/utp-nomenclaturas/v1/ad-sets/{uuid}'
@@ -79,6 +85,7 @@ utp_nomenclaturas.ad_set_update:
   methods: [PATCH]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.ad_set_delete:
   path: '/api/utp-nomenclaturas/v1/ad-sets/{uuid}'
@@ -87,6 +94,7 @@ utp_nomenclaturas.ad_set_delete:
   methods: [DELETE]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.ad_set_duplicate:
   path: '/api/utp-nomenclaturas/v1/ad-sets/{uuid}/duplicate'
@@ -95,6 +103,7 @@ utp_nomenclaturas.ad_set_duplicate:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 # ---- Ad -----------------------------------------------------------------
 
@@ -105,6 +114,7 @@ utp_nomenclaturas.ad_create:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.ad_update:
   path: '/api/utp-nomenclaturas/v1/ads/{uuid}'
@@ -113,6 +123,7 @@ utp_nomenclaturas.ad_update:
   methods: [PATCH]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.ad_delete:
   path: '/api/utp-nomenclaturas/v1/ads/{uuid}'
@@ -121,6 +132,7 @@ utp_nomenclaturas.ad_delete:
   methods: [DELETE]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.ad_duplicate:
   path: '/api/utp-nomenclaturas/v1/ads/{uuid}/duplicate'
@@ -129,6 +141,7 @@ utp_nomenclaturas.ad_duplicate:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 # ---- UTM (Fase 3, §3.4/§7.3 del SDD) -----------------------------------
 
@@ -155,6 +168,7 @@ utp_nomenclaturas.utms_config_update:
   methods: [PATCH]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.utms_manual_list:
   path: '/api/utp-nomenclaturas/v1/utms/manual'
@@ -171,6 +185,7 @@ utp_nomenclaturas.utms_manual_create:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 utp_nomenclaturas.utms_manual_delete:
   path: '/api/utp-nomenclaturas/v1/utms/manual/{uuid}'
@@ -179,6 +194,7 @@ utp_nomenclaturas.utms_manual_delete:
   methods: [DELETE]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
 
 # ---- Export / Import (Fase 3, §3.5/§9.4/§10 del SDD) -------------------
 
@@ -213,3 +229,70 @@ utp_nomenclaturas.import:
   methods: [POST]
   requirements:
     _permission: 'edit utp nomenclaturas'
+    _csrf_request_header_token: 'TRUE'
+
+# ---- Config Nivel 1/2/3 (Fase 4, §7.1/§3.2 D1-D4 del SDD) --------------
+
+utp_nomenclaturas.config_list_get:
+  path: '/api/utp-nomenclaturas/v1/config/lists/{list_key}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ConfigController::getListValues'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'
+
+utp_nomenclaturas.config_list_add:
+  path: '/api/utp-nomenclaturas/v1/config/lists/{list_key}/values'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ConfigController::addListValue'
+  methods: [POST]
+  requirements:
+    _permission: 'administer utp nomenclaturas config'
+    _csrf_request_header_token: 'TRUE'
+
+utp_nomenclaturas.config_list_delete:
+  path: '/api/utp-nomenclaturas/v1/config/lists/{list_key}/values/{code}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ConfigController::deleteListValue'
+  methods: [DELETE]
+  requirements:
+    _permission: 'administer utp nomenclaturas config'
+    _csrf_request_header_token: 'TRUE'
+
+utp_nomenclaturas.config_etapa_options:
+  path: '/api/utp-nomenclaturas/v1/config/etapa-options/{etapa}/{field}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ConfigController::updateEtapaOptions'
+  methods: [PUT]
+  requirements:
+    _permission: 'administer utp nomenclaturas config'
+    _csrf_request_header_token: 'TRUE'
+
+utp_nomenclaturas.config_segmento_pilar:
+  path: '/api/utp-nomenclaturas/v1/config/segmento-pilar/{segmento}'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ConfigController::updateSegmentoPilar'
+  methods: [PUT]
+  requirements:
+    _permission: 'administer utp nomenclaturas config'
+    _csrf_request_header_token: 'TRUE'
+
+utp_nomenclaturas.config_campus_facultad:
+  path: '/api/utp-nomenclaturas/v1/config/campus-facultad'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\ConfigController::updateCampusFacultad'
+  methods: [PUT]
+  requirements:
+    _permission: 'administer utp nomenclaturas config'
+    _csrf_request_header_token: 'TRUE'
+
+# ---- Mount de la SPA (Fase 4, §9.5 del SDD) -----------------------------
+
+utp_nomenclaturas.app:
+  path: '/admin/utp/nomenclaturas'
+  defaults:
+    _controller: '\Drupal\utp_nomenclaturas\Controller\AppController::app'
+    _title: 'UTP Nomenclaturas'
+  methods: [GET]
+  requirements:
+    _permission: 'access utp nomenclaturas'

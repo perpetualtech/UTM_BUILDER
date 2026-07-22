@@ -1,17 +1,35 @@
 import { ApiError, type ApiErrorBody } from "@/modules/core/types/api";
+import "@/modules/core/types/drupal";
 
 /**
- * Base de la API (§7 del SDD). En Fase 4, cuando se monte en Drupal, esta
- * variable de entorno apunta al sitio real; hoy MSW intercepta las mismas
- * rutas en dev/test.
+ * Base de la API (§7 del SDD): `drupalSettings.utpNomenclaturas.apiBase`
+ * cuando la SPA está montada en Drupal (Fase 4, §9.5); si no (dev
+ * standalone con Vite/MSW), cae a `VITE_API_BASE`/el default de siempre.
  */
-const API_BASE = import.meta.env.VITE_API_BASE ?? "/api/utp-nomenclaturas/v1";
+function getApiBase(): string {
+  return window.drupalSettings?.utpNomenclaturas?.apiBase ?? import.meta.env.VITE_API_BASE ?? "/api/utp-nomenclaturas/v1";
+}
+
+/**
+ * Token CSRF (Fase 4, §9.5): las rutas de escritura exigen
+ * `X-CSRF-Token` (`_csrf_request_header_token` en Drupal). Ausente en dev
+ * standalone — el header simplemente no se manda.
+ */
+function getCsrfToken(): string | undefined {
+  return window.drupalSettings?.utpNomenclaturas?.csrfToken;
+}
+
+const MUTATING_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const csrfToken = MUTATING_METHODS.has(method) ? getCsrfToken() : undefined;
+
+  const response = await fetch(`${getApiBase()}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {}),
       ...init?.headers,
     },
   });
@@ -35,6 +53,8 @@ export const http = {
     request<T>(path, { method: "POST", body: data ? JSON.stringify(data) : undefined }),
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: "PATCH", body: data ? JSON.stringify(data) : undefined }),
+  put: <T>(path: string, data?: unknown) =>
+    request<T>(path, { method: "PUT", body: data ? JSON.stringify(data) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
 
@@ -44,7 +64,7 @@ export const http = {
  * como adjunto). Lee el filename de `Content-Disposition` cuando está.
  */
 export async function fetchFile(path: string): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch(`${API_BASE}${path}`);
+  const response = await fetch(`${getApiBase()}${path}`);
 
   if (!response.ok) {
     const body = (await response.json()) as ApiErrorBody;

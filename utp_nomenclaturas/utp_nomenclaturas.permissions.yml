@@ -1,8 +1,8 @@
-# Permisos reales (roles, CSRF, ruta admin) llegan completos en Fase 4
-# (§9.5 del SDD). Se anticipan acá los 2 nombres de lectura/escritura para
-# no tener que renombrar rutas después. "administer utp nomenclaturas
-# config" (diccionarios/matriz D4) se agrega recién cuando exista esa UI
-# en Fase 4.
+# Permisos reales (§9.5 del SDD): 'access' para lectura, 'edit' para
+# mutar el árbol/UTM/export, 'administer config' para Config Nivel 1/2/3 +
+# matriz D4 — separado de 'edit' porque el propio SDD distingue "crear/
+# editar/eliminar campañas" de "diccionarios/matriz" como permisos
+# independientes.
 'access utp nomenclaturas':
   title: 'Ver nomenclaturas UTP'
   description: 'Acceso de lectura a la configuración y al árbol de campañas/conjuntos/anuncios vía API.'
@@ -12,3 +12,8 @@
   title: 'Editar nomenclaturas UTP'
   description: 'Crear, editar, eliminar y duplicar campañas/conjuntos/anuncios vía API.'
   restrict access: false
+
+'administer utp nomenclaturas config':
+  title: 'Administrar configuración de nomenclaturas UTP'
+  description: 'Editar listas del diccionario, condicionales por etapa, pilares por segmento y la matriz Campus×Facultad (Config Nivel 1/2/3).'
+  restrict access: true

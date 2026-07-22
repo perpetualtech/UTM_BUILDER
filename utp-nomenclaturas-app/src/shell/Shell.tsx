@@ -8,6 +8,8 @@ const TITLES: Record<string, string> = {
   "/repository": "Repositorio",
   "/utm": "UTMs",
   "/export": "Exportar",
+  "/config": "Configuración",
+  "/dictionary": "Diccionario",
 };
 
 /** §8.2 del SDD: App → Shell → Sidebar, Topbar, Router. */

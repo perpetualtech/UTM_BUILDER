@@ -3,11 +3,13 @@
 namespace Drupal\utp_nomenclaturas\Service;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\utp_nomenclaturas\Exception\DuplicateNameException;
+use Drupal\utp_nomenclaturas\Exception\ValidationException;
 
 /**
- * Expone el bundle de diccionario + constantes UTM (Anexo A/B del SDD) y
- * resuelve las condicionales D1-D3 (§3.2). D4 (matriz editable
- * Campus×Facultad) es Fase 4 — aquí solo se LEE `campus_facultad`.
+ * Expone el bundle de diccionario + constantes UTM (Anexo A/B del SDD),
+ * resuelve las condicionales D1-D4 (§3.2) y mutación de la Configuración
+ * Nivel 1/2/3 (§7.1, Fase 4) sobre `utp_nomenclaturas.dictionary`.
  */
 class DictionaryProvider {
 
@@ -17,6 +19,14 @@ class DictionaryProvider {
    * la entidad (obj_camp/obj_plat/tipo_camp).
    */
   private const ETAPA_CONDITIONED_FIELDS = ['medio', 'objCamp', 'objPlat', 'tipoCamp'];
+
+  /**
+   * Listas planas editables vía Config Nivel 1/3 (`listEditorCard()` del
+   * HTML de referencia) — `etapa`, `ubicacion`, `facultad` y `detalle` NO
+   * se editan por este endpoint genérico (etapa es fija; ubicacion/
+   * facultad se gestionan vía la matriz D4; detalle es texto libre).
+   */
+  private const EDITABLE_LISTS = ['segmento', 'campus', 'edad', 'senal', 'formato', 'nombre', 'motivo', 'mensaje', 'carrera', 'fecha'];
 
   public function __construct(
     protected readonly ConfigFactoryInterface $configFactory,
@@ -165,6 +175,114 @@ class DictionaryProvider {
     }
 
     return in_array($value, $bundle['lists'][$listKey], TRUE);
+  }
+
+  // ==================================================================
+  // Config Nivel 1/2/3 — mutaciones (§7.1/§11 Fase 4 del SDD)
+  // ==================================================================
+
+  /**
+   * Agrega un valor a una lista plana editable.
+   *
+   * @throws ValidationException si $listKey no es editable por este endpoint.
+   * @throws DuplicateNameException si el valor ya existe en la lista.
+   */
+  public function addListValue(string $listKey, string $value): void {
+    $this->assertEditableList($listKey);
+    $config = $this->configFactory->getEditable('utp_nomenclaturas.dictionary');
+    $values = $config->get("lists.$listKey") ?? [];
+
+    if (in_array($value, $values, TRUE)) {
+      throw new DuplicateNameException('valor', $value, "la lista '$listKey'");
+    }
+
+    $values[] = $value;
+    $config->set("lists.$listKey", array_values($values))->save();
+  }
+
+  /**
+   * Quita un valor de una lista plana editable.
+   *
+   * @return bool TRUE si el valor existía y se quitó; FALSE si no existía
+   *   (DELETE idempotente — el llamador decide si eso es 204 o 404).
+   *
+   * @throws ValidationException si $listKey no es editable por este endpoint.
+   */
+  public function deleteListValue(string $listKey, string $value): bool {
+    $this->assertEditableList($listKey);
+    $config = $this->configFactory->getEditable('utp_nomenclaturas.dictionary');
+    $values = $config->get("lists.$listKey") ?? [];
+
+    if (!in_array($value, $values, TRUE)) {
+      return FALSE;
+    }
+
+    $config->set("lists.$listKey", array_values(array_filter($values, fn ($v) => $v !== $value)))->save();
+    return TRUE;
+  }
+
+  /**
+   * D1: reemplaza el array completo de opciones de un campo condicionado
+   * por etapa — equivalente a editar los chips de una tarjeta de etapa en
+   * Config Nivel 1 y guardar.
+   *
+   * @throws \InvalidArgumentException si $field no es uno de los 4 campos
+   *   condicionados por etapa.
+   */
+  public function updateEtapaOptions(string $etapa, string $field, array $values): void {
+    if (!in_array($field, self::ETAPA_CONDITIONED_FIELDS, TRUE)) {
+      throw new \InvalidArgumentException(sprintf(
+        "'%s' no es un campo condicionado por etapa. Válidos: %s",
+        $field,
+        implode(', ', self::ETAPA_CONDITIONED_FIELDS)
+      ));
+    }
+
+    $config = $this->configFactory->getEditable('utp_nomenclaturas.dictionary');
+    $config->set("etapa_conditionals.$field.$etapa", array_values($values))->save();
+  }
+
+  /**
+   * D2: reemplaza el array completo de pilares de un segmento.
+   */
+  public function updateSegmentoPilar(string $segmento, array $pilares): void {
+    $config = $this->configFactory->getEditable('utp_nomenclaturas.dictionary');
+    $config->set("segmento_pilar.$segmento", array_values($pilares))->save();
+  }
+
+  /**
+   * D4: reemplaza la matriz Campus×Facultad completa. Normaliza igual que
+   * `toggleFacultadAtSede()` del HTML: si una facultad queda ofrecida en
+   * TODAS las `sedes_especificas`, se elimina su entrada (pasa a "sin
+   * restricción") — el servidor es la fuente de verdad de esta regla, no
+   * el cliente.
+   *
+   * @param array<string, string[]> $matrix facultad => sedes permitidas.
+   */
+  public function updateCampusFacultad(array $matrix): void {
+    $bundle = $this->getBundle();
+    $sedesEspecificas = $bundle['sedes_especificas'] ?? [];
+
+    $normalized = [];
+    foreach ($matrix as $facultad => $sedes) {
+      $sedes = array_values(array_unique($sedes));
+      $coversAll = !array_diff($sedesEspecificas, $sedes);
+      if (!$coversAll) {
+        $normalized[$facultad] = $sedes;
+      }
+    }
+
+    $config = $this->configFactory->getEditable('utp_nomenclaturas.dictionary');
+    $config->set('campus_facultad', $normalized)->save();
+  }
+
+  private function assertEditableList(string $listKey): void {
+    if (!in_array($listKey, self::EDITABLE_LISTS, TRUE)) {
+      throw new ValidationException(
+        "'$listKey' no es una lista editable.",
+        [['field' => 'list_key', 'reason' => "Válidas: " . implode(', ', self::EDITABLE_LISTS)]]
+      );
+    }
   }
 
 }

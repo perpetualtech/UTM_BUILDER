@@ -35,6 +35,10 @@ class ManualUtmValidationTest extends KernelTestBase {
     return $this->container->get('http_kernel')->handle($request, HttpKernelInterface::MAIN_REQUEST);
   }
 
+  /**
+   * Adjunta X-CSRF-Token (Fase 4, §9.5) — las rutas de escritura exigen
+   * `_csrf_request_header_token: 'TRUE'` desde Fase 4.
+   */
   private function jsonRequest(string $method, string $path, array $body = []): Request {
     return Request::create(
       $path,
@@ -42,7 +46,10 @@ class ManualUtmValidationTest extends KernelTestBase {
       [],
       [],
       [],
-      ['CONTENT_TYPE' => 'application/json'],
+      [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_CSRF_TOKEN' => $this->container->get('csrf_token')->get(),
+      ],
       $body ? json_encode($body) : NULL,
     );
   }
@@ -113,7 +120,7 @@ class ManualUtmValidationTest extends KernelTestBase {
       TRUE
     );
 
-    $response = $this->dispatch(Request::create('/api/utp-nomenclaturas/v1/utms/manual/' . $created['uuid'], 'DELETE'));
+    $response = $this->dispatch($this->jsonRequest('DELETE', '/api/utp-nomenclaturas/v1/utms/manual/' . $created['uuid']));
     $this->assertEquals(204, $response->getStatusCode());
 
     $list = json_decode(

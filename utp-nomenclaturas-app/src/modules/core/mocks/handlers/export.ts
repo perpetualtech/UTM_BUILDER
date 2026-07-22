@@ -2,11 +2,11 @@ import ExcelJS from "exceljs";
 import { HttpResponse, http } from "msw";
 import { respond } from "@/modules/core/mocks/handlers/respond";
 import { deriveUtm } from "@/modules/core/lib/utmDeriver";
-import { seedDictionary } from "@/modules/core/mocks/seedDictionary";
 import {
   campaignsForExport,
   exportBackup,
   flattenPaidUtms,
+  getDictionary,
   getUtmConfig,
   importBackup,
   listManualUtms,
@@ -55,7 +55,7 @@ async function buildCampaignsWorkbook(tree: ExportCampaignTree[]): Promise<Excel
           continue;
         }
         for (const ad of adSet.ads) {
-          const derived = deriveUtm(seedDictionary, {
+          const derived = deriveUtm(getDictionary(), {
             medio: campaign.medio,
             tipo_camp: campaign.tipo_camp,
             campaign_name: campaign.name,
