@@ -1,9 +1,9 @@
 # SDD – UTP · Constructor de Nomenclaturas
 ### Spec-Driven Development para reconstrucción full-stack y despliegue en Drupal
 
-> **Cómo usar este documento con Claude Code.**
+> **Cómo usar este documento.**
 > Carga en el mismo repo **este `.md` + el artefacto de referencia `UTP-Nomenclaturas.html`**. El HTML es la *fuente de verdad funcional* (reglas y datos ya validados por UTP); este `.md` es la especificación de arquitectura destino.
-> Trabaja en modo **plan-first**: Claude Code debe imprimir el plan de la fase, esperar confirmación, y recién entonces editar archivos. No avanzar de fase sin cumplir los *acceptance criteria* de la anterior. No sobre-ingeniería: **lo justo y necesario**.
+> Trabaja en modo **plan-first**: el equipo de desarrollo debe imprimir el plan de la fase, esperar confirmación, y recién entonces editar archivos. No avanzar de fase sin cumplir los *acceptance criteria* de la anterior. No sobre-ingeniería: **lo justo y necesario**.
 
 ---
 
@@ -589,7 +589,7 @@ El HTML actual guarda en `localStorage`:
 
 ---
 
-## 11. Plan de construcción por fases (para Claude Code)
+## 11. Plan de construcción por fases
 
 > En cada fase: **imprimir plan → confirmar → implementar → correr acceptance criteria**. No mezclar fases.
 

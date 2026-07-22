@@ -1,6 +1,4 @@
 .DS_Store
 node_modules/
 vendor/
-.claude/settings.local.json
-.claude/scheduled_tasks.lock
 .env
