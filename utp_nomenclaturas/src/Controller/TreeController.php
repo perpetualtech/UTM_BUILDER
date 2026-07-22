@@ -51,15 +51,27 @@ class TreeController extends ControllerBase {
 
     $storage = $this->entityTypeManager->getStorage('campaign');
     $adSetStorage = $this->entityTypeManager->getStorage('ad_set');
+    $adStorage = $this->entityTypeManager->getStorage('ad');
 
     $result = [];
     foreach ($storage->loadMultiple($query->execute()) as $campaign) {
-      $adSetCount = $adSetStorage->getQuery()->accessCheck(FALSE)
+      $adSetIds = $adSetStorage->getQuery()->accessCheck(FALSE)
         ->condition('campaign_id', $campaign->id())
-        ->count()
         ->execute();
 
-      $result[] = $this->campaignToArray($campaign) + ['ad_sets_count' => (int) $adSetCount];
+      // §4 del SDD: KPI de "anuncios" = Σ anuncios de todos los conjuntos
+      // de la campaña, no solo el conteo de conjuntos.
+      $adCount = $adSetIds
+        ? (int) $adStorage->getQuery()->accessCheck(FALSE)
+          ->condition('ad_set_id', $adSetIds, 'IN')
+          ->count()
+          ->execute()
+        : 0;
+
+      $result[] = $this->campaignToArray($campaign) + [
+        'ad_sets_count' => count($adSetIds),
+        'ads_count' => $adCount,
+      ];
     }
 
     return new JsonResponse($result);

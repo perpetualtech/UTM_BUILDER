@@ -1,0 +1,6 @@
+{
+  "ignore": {
+    "rules": ["react-doctor/only-export-components", "react-doctor/prefer-tag-over-role"],
+    "files": ["src/modules/core/components/design-system/**"]
+  }
+}

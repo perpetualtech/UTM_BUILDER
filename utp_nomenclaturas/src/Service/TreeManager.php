@@ -79,7 +79,11 @@ class TreeManager {
   }
 
   /**
-   * @param array $payload Campos parciales: {pillar_code?, meta?: array}
+   * @param array $payload Campos parciales: {pillar_code?, meta?: array,
+   *   name?: string}. `name` es un override manual del nombre derivado —
+   *   igual que "editar nombre inline" en el HTML de referencia
+   *   (saveEdit()): reemplaza el string sin re-derivar desde meta. Uso
+   *   exclusivo entre sí con `meta` (edición inline vs. edición de campos).
    */
   public function updateCampaign(Campaign $campaign, array $payload): Campaign {
     $pillarCode = array_key_exists('pillar_code', $payload)
@@ -89,6 +93,17 @@ class TreeManager {
       throw new ValidationException('pillar_code es requerido.', [
         ['field' => 'pillar_code', 'reason' => 'Requerido'],
       ]);
+    }
+
+    if (array_key_exists('name', $payload) && trim((string) $payload['name']) !== '') {
+      $newName = trim((string) $payload['name']);
+      if ($newName !== $campaign->get('name')->value) {
+        $this->assertCampaignNameUnique($pillarCode, $newName, (int) $campaign->id());
+      }
+      $campaign->set('pillar_code', $pillarCode);
+      $campaign->set('name', $newName);
+      $campaign->save();
+      return $campaign;
     }
 
     $incomingMeta = $payload['meta'] ?? [];
@@ -243,7 +258,22 @@ class TreeManager {
     return $adSet;
   }
 
+  /**
+   * @param array $payload {meta?: array, weight?: int, name?: string}.
+   *   `name` es override manual (edición inline), ver nota en updateCampaign().
+   */
   public function updateAdSet(AdSet $adSet, array $payload): AdSet {
+    if (array_key_exists('name', $payload) && trim((string) $payload['name']) !== '') {
+      $newName = trim((string) $payload['name']);
+      $campaignId = (int) $adSet->get('campaign_id')->target_id;
+      if ($newName !== $adSet->get('name')->value) {
+        $this->assertAdSetNameUnique($campaignId, $newName, (int) $adSet->id());
+      }
+      $adSet->set('name', $newName);
+      $adSet->save();
+      return $adSet;
+    }
+
     $incomingMeta = $payload['meta'] ?? [];
     $meta = [];
     foreach (self::AD_SET_META_FIELDS as $field) {
@@ -374,9 +404,25 @@ class TreeManager {
   }
 
   /**
-   * @param array $payload Campos parciales: {meta?: array, url?: string}
+   * @param array $payload Campos parciales: {meta?: array, url?: string,
+   *   name?: string}. `name` es override manual (edición inline), ver nota
+   *   en updateCampaign().
    */
   public function updateAd(Ad $ad, array $payload): Ad {
+    if (array_key_exists('name', $payload) && trim((string) $payload['name']) !== '') {
+      $newName = trim((string) $payload['name']);
+      $adSetId = (int) $ad->get('ad_set_id')->target_id;
+      if ($newName !== $ad->get('name')->value) {
+        $this->assertAdNameUnique($adSetId, $newName, (int) $ad->id());
+      }
+      $ad->set('name', $newName);
+      if (array_key_exists('url', $payload)) {
+        $ad->set('url', $payload['url']);
+      }
+      $ad->save();
+      return $ad;
+    }
+
     $incomingMeta = $payload['meta'] ?? [];
     $meta = [];
     foreach (self::AD_META_FIELDS as $field) {
