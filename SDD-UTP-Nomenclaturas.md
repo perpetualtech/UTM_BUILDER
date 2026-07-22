@@ -1,9 +1,10 @@
 # SDD – UTP · Constructor de Nomenclaturas
 ### Spec-Driven Development para reconstrucción full-stack y despliegue en Drupal
 
-> **Cómo usar este documento.**
-> Carga en el mismo repo **este `.md` + el artefacto de referencia `UTP-Nomenclaturas.html`**. El HTML es la *fuente de verdad funcional* (reglas y datos ya validados por UTP); este `.md` es la especificación de arquitectura destino.
-> Trabaja en modo **plan-first**: el equipo de desarrollo debe imprimir el plan de la fase, esperar confirmación, y recién entonces editar archivos. No avanzar de fase sin cumplir los *acceptance criteria* de la anterior. No sobre-ingeniería: **lo justo y necesario**.
+> **Cómo leer este documento.**
+> Este documento describe cómo el *Constructor de Nomenclaturas* pasa de ser una herramienta en un solo archivo HTML (`UTP-Nomenclaturas.html`, la que UTP ya usa y valida hoy) a una solución full-stack sobre Drupal, sin cambiar ninguna regla de negocio en el camino: el HTML sigue siendo la *fuente de verdad funcional* — sus reglas y su diccionario ya están aprobados por UTP — y este `.md` documenta la arquitectura destino y cómo se llega a ella.
+>
+> Se organiza en tres bloques: **contexto y decisiones de arquitectura** (§0-1), **especificación técnica** — dominio, reglas de negocio, esquema de base de datos, API, frontend e integración con Drupal (§2-9) —, y **plan de entrega**, con la ruta de migración de datos y las fases de construcción junto con sus criterios de aceptación (§10-12). Los Anexos incluyen los datos semilla, constantes y paleta de diseño necesarios para implementar cada fase sin tener que volver al HTML original.
 
 ---
 
