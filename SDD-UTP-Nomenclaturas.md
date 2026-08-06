@@ -60,9 +60,11 @@ Más un módulo lateral: **UTM manual** (`manual_utm`) para tráfico sin pauta (
 |---|---|---|
 | **Campaña** | `segmento` · `etapa` · `campus` · `medio` · `objCamp` · `objPlat` · `tipoCamp` · **`pilar`** (se agrega al final) | — |
 | **Conjunto** | `edad` · `ubicacion` · `facultad` · `senal` · `detalle` | — |
-| **Anuncio** | `formato` · `nombre` · `motivo` · `mensaje` · `carrera` · `fecha` | **`url`** (destino natural; se guarda y hereda al siguiente anuncio, **no** entra al nombre) |
+| **Anuncio** | `formato` · `nombre`† · `motivo` · `mensaje` · `carrera` · `fecha` | **`url`** (destino natural; se guarda y hereda al siguiente anuncio, **no** entra al nombre) |
 
 > `detalle` (conjunto) y `mensaje` (anuncio) admiten **valor libre** además de la lista (datalist / campo "Personalizar"). El resto son selects cerrados sobre el diccionario.
+>
+> † `nombre` es el término de negocio (lista del diccionario, campo del frontend `data-a="nombre"`); en la tabla `ad` la columna se llama `concepto` — ver §6.2/§7.2. Mismo dato, dos nombres por contexto.
 
 ---
 
@@ -480,7 +482,7 @@ utp_nomenclaturas/
     EventSubscriber/   UtpNomenclaturaExceptionSubscriber.php
   frontend/index.html                    # frontend (§8, ADR-004)
 ```
-Sin JSON:API ni `RestResource` plugins: los 6 `Controller/*.php` son la API completa — más simple de leer y depurar que resolver el contrato genérico de JSON:API para un dominio con reglas de negocio propias (D1-D4).
+Sin JSON:API ni `RestResource` plugins: los 6 `Controller/*.php` son la API completa. Evita mapear las condicionales D1-D4 (reglas de negocio propias, no CRUD genérico) sobre el contrato estándar de JSON:API.
 
 ### 9.2 Persistencia
 - **Content entities** para lo transaccional: `Campaign`, `AdSet`, `Ad`, `ManualUtm` → tablas `campaign`/`ad_set`/`ad`/`manual_utm` (§6.2). Relaciones padre-hijo por `entity_reference` + borrado en cascada (`ON_DELETE_CASCADE`) nativo de la Entity API.
