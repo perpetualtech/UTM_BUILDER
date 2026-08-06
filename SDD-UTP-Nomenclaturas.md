@@ -12,8 +12,8 @@
 
 | | |
 |---|---|
-| **Qué existe hoy** | SPA vanilla (HTML/CSS/JS) autónoma, con persistencia en `localStorage`. Un solo archivo. Sin backend, sin multiusuario, sin gobierno de datos. |
-| **Qué se necesita** | La misma funcionalidad, reconstruida con **frontend + backend + base de datos** reales, multiusuario, persistente y auditable. |
+| **Qué existía ANTES de este proyecto** (`UTP-Nomenclaturas.html`, el archivo de referencia) | SPA vanilla (HTML/CSS/JS) autónoma, con persistencia en `localStorage`. Un solo archivo. Sin backend, sin multiusuario, sin gobierno de datos. |
+| **Qué se construyó en este proyecto** | Backend real: módulo Drupal con 4 tablas MySQL propias (`campaign`, `ad_set`, `ad`, `manual_utm`, ver §6) + API REST (§7). Frontend: HTML/CSS/JS (§8) que ya **no usa `localStorage` para nada de negocio** — cada acción (crear/editar/eliminar/duplicar/exportar) hace un `fetch()` a esa API, que es la que escribe en MySQL. Ver el mapeo completo en §8.5. |
 | **Destino final** | El cliente (UTP) lo **monta en Drupal** (stack Drupal / PHP / MySQL). |
 | **Alcance de este spec** | Arquitectura frontend, arquitectura backend, esquema de tablas y dependencias, contrato de API, lógica canónica de naming y UTM, integración Drupal, migración y plan de construcción por fases. |
 
@@ -23,16 +23,12 @@
 
 ## 1. Decisión de arquitectura (ADR resumida)
 
-### ADR-001 · Estrategia de montaje en Drupal — **Módulo Drupal progresivamente desacoplado**
+### ADR-001 · Un único módulo Drupal (`utp_nomenclaturas`) — datos + API + frontend
+- **Datos:** content entities en MySQL vía Entity API (§6): `campaign`, `ad_set`, `ad`, `manual_utm`. Diccionario y condicionales como Configuration (§9.2).
+- **API:** REST propia bajo `/api/utp-nomenclaturas/v1/*` (§7).
+- **Frontend:** una página HTML/CSS/JS servida por el mismo módulo (§8, ADR-004).
 
-**Recomendado (primario).** Un único módulo custom `utp_nomenclaturas` para **Drupal 10/11** que contiene:
-- La **capa de datos** (content entities + configuration entities en MySQL, vía Entity API).
-- La **API** (JSON:API para CRUD de entidades + `RestResource` plugins para lo derivado: preview de nombre, UTMs paid, export, import).
-- El **frontend** (§8): una sola página HTML/CSS/JavaScript plano — sin framework ni paso de build — servida directo por un controlador de la misma ruta admin.
-
-*Por qué:* "montar en Drupal" = **habilitar el módulo**. Sin servidor aparte, sin SSO ni CORS entre dominios, sin duplicar auth. La config (diccionarios) viaja versionada con el módulo. Es el patrón *progressively decoupled Drupal*, estándar y soportado.
-
-**Alternativa (fallback, documentada §9.6).** Headless total: API standalone (Node/Express o Symfony) + DB propia + frontend embebido en Drupal por `iframe`/SSO. Solo si en el futuro se quiere reutilizar el frontend fuera de Drupal. Mayor costo de integración; **no** es el camino por defecto.
+Todo vive en un solo `drush en utp_nomenclaturas`, sin servidor aparte ni CORS entre dominios.
 
 ### ADR-002 · Los nombres son **snapshots inmutables**
 El nombre de campaña/conjunto/anuncio se deriva de los códigos seleccionados **en el momento de crear**. Si luego se edita/elimina un valor del diccionario, los nombres históricos **no cambian**. → En el esquema, los códigos seleccionados se **almacenan como strings** en la fila del registro (denormalizado), y se **validan** contra el diccionario en *write-time* (no hay FK dura que rompa históricos). Esto es una dependencia crítica, no un detalle.
@@ -176,6 +172,8 @@ MySQL/MariaDB (nativo Drupal). Se presenta **relacional puro** (para claridad de
 
 ### 6.1 Diagrama ER
 
+> Los recuadros `DICT_*`/`ETAPA_OPTION`/`SEGMENTO_PILAR`/`FACULTAD_SEDE`/`UBICACION_GROUP` son el **modelo conceptual** (para entender las relaciones) — en la implementación real **no son tablas SQL**, es un solo objeto de Configuration de Drupal. Ver §6.3 para el mapeo exacto. `CAMPAIGN`/`AD_SET`/`AD`/`MANUAL_UTM` sí son tablas MySQL reales (§6.2); `UTM_CONFIG` tampoco es tabla (nota en §6.2).
+
 ```mermaid
 erDiagram
     DICT_LIST ||--o{ DICT_VALUE : contiene
@@ -287,127 +285,81 @@ erDiagram
     }
 ```
 
-### 6.2 DDL de referencia (transaccional)
+### 6.2 Las 4 tablas MySQL reales (esto SÍ existe en la base de datos)
+
+Estas 4 son tablas de verdad, creadas por Drupal al instalar el módulo (Entity API, a partir de `src/Entity/*.php`) — cada `INSERT`/`UPDATE`/`DELETE` que hace el frontend termina en una de estas filas:
 
 ```sql
--- ── CAMPAÑA ──────────────────────────────────────────────────
+-- ── CAMPAÑA — tabla `campaign` ─────────────────────────────────
 CREATE TABLE campaign (
   id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-  uuid         CHAR(36) NOT NULL UNIQUE,
+  uuid         CHAR(36) NOT NULL UNIQUE,      -- identidad que usa la API/el frontend
   pillar_code  VARCHAR(64)  NOT NULL,
-  name         VARCHAR(512) NOT NULL,        -- snapshot derivado (ADR-002)
+  name         VARCHAR(512) NOT NULL,        -- nombre derivado, snapshot inmutable (ADR-002)
   segmento     VARCHAR(64), etapa VARCHAR(64), campus VARCHAR(64),
   medio        VARCHAR(64), obj_camp VARCHAR(64), obj_plat VARCHAR(64), tipo_camp VARCHAR(64),
-  created_at   DATETIME NOT NULL, updated_at DATETIME NOT NULL, created_by INT NULL,
-  UNIQUE KEY uq_campaign_pillar_name (pillar_code, name),
-  KEY idx_campaign_medio (medio), KEY idx_campaign_pillar (pillar_code)
+  uid          INT NULL,                      -- usuario Drupal que la creó
+  created      INT NOT NULL, changed INT NOT NULL,   -- timestamps Unix (estándar Drupal)
+  UNIQUE KEY uq_campaign_pillar_name (pillar_code, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ── CONJUNTO ─────────────────────────────────────────────────
+-- ── CONJUNTO — tabla `ad_set` ──────────────────────────────────
 CREATE TABLE ad_set (
   id          BIGINT AUTO_INCREMENT PRIMARY KEY,
   uuid        CHAR(36) NOT NULL UNIQUE,
-  campaign_id BIGINT NOT NULL,
+  campaign_id BIGINT NOT NULL,                -- FK real a campaign.id, cascada de borrado
   name        VARCHAR(512) NOT NULL,
   edad VARCHAR(64), ubicacion VARCHAR(64), facultad VARCHAR(64), senal VARCHAR(64), detalle VARCHAR(255),
   weight      INT NOT NULL DEFAULT 0,
-  created_at  DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+  created     INT NOT NULL, changed INT NOT NULL,
   CONSTRAINT fk_adset_campaign FOREIGN KEY (campaign_id) REFERENCES campaign(id) ON DELETE CASCADE,
   UNIQUE KEY uq_adset_camp_name (campaign_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ── ANUNCIO ──────────────────────────────────────────────────
+-- ── ANUNCIO — tabla `ad` ───────────────────────────────────────
 CREATE TABLE ad (
   id         BIGINT AUTO_INCREMENT PRIMARY KEY,
   uuid       CHAR(36) NOT NULL UNIQUE,
-  ad_set_id  BIGINT NOT NULL,
+  ad_set_id  BIGINT NOT NULL,                 -- FK real a ad_set.id, cascada de borrado
   name       VARCHAR(512) NOT NULL,
   formato VARCHAR(64), concepto VARCHAR(128), motivo VARCHAR(64),
   mensaje VARCHAR(255), carrera VARCHAR(64), fecha VARCHAR(16),
-  url        VARCHAR(1024) NULL,             -- NO forma parte del nombre
+  url        VARCHAR(1024) NULL,              -- NO forma parte del nombre
   weight     INT NOT NULL DEFAULT 0,
-  created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL,
+  created    INT NOT NULL, changed INT NOT NULL,
   CONSTRAINT fk_ad_adset FOREIGN KEY (ad_set_id) REFERENCES ad_set(id) ON DELETE CASCADE,
   UNIQUE KEY uq_ad_set_name (ad_set_id, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ── UTM MANUAL ───────────────────────────────────────────────
+-- ── UTM MANUAL — tabla `manual_utm` ────────────────────────────
 CREATE TABLE manual_utm (
   id BIGINT AUTO_INCREMENT PRIMARY KEY, uuid CHAR(36) NOT NULL UNIQUE,
   utm_source VARCHAR(128) NOT NULL, utm_medium VARCHAR(128) NOT NULL,
   utm_campaign VARCHAR(255), utm_term VARCHAR(255), utm_content VARCHAR(255),
   url VARCHAR(1024) NOT NULL, qs TEXT NOT NULL,
-  created_at DATETIME NOT NULL, created_by INT NULL,
-  KEY idx_manutm_source (utm_source)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ── CONFIG UTM (singleton) ───────────────────────────────────
-CREATE TABLE utm_config (
-  id TINYINT PRIMARY KEY DEFAULT 1,
-  default_url VARCHAR(1024) NOT NULL DEFAULT '',
-  meta_mode ENUM('macro','hard') NOT NULL DEFAULT 'macro',
-  CHECK (id = 1)
-) ENGINE=InnoDB;
-```
-
-### 6.3 DDL de referencia (diccionario / config)
-
-```sql
-CREATE TABLE dict_list (
-  list_key VARCHAR(64) PRIMARY KEY,
-  label VARCHAR(128) NOT NULL,
-  level ENUM('campaign','ad_set','ad','meta') NOT NULL,
-  editable TINYINT(1) NOT NULL DEFAULT 1
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE dict_value (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  list_key VARCHAR(64) NOT NULL,
-  value_code VARCHAR(128) NOT NULL,
-  value_label VARCHAR(255) NULL,       -- p.ej. facultadNombre
-  sort_order INT NOT NULL DEFAULT 0,
-  is_active TINYINT(1) NOT NULL DEFAULT 1,
-  CONSTRAINT fk_dv_list FOREIGN KEY (list_key) REFERENCES dict_list(list_key) ON DELETE CASCADE,
-  UNIQUE KEY uq_dv (list_key, value_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- etapa → (medio|objCamp|objPlat|tipoCamp)
-CREATE TABLE etapa_option (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  etapa_code VARCHAR(64) NOT NULL,
-  field_key ENUM('medio','objCamp','objPlat','tipoCamp') NOT NULL,
-  option_code VARCHAR(128) NOT NULL,
-  sort_order INT NOT NULL DEFAULT 0,
-  UNIQUE KEY uq_eo (etapa_code, field_key, option_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- segmento → pilar
-CREATE TABLE segmento_pilar (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  segmento_code VARCHAR(64) NOT NULL,
-  pilar_code VARCHAR(64) NOT NULL,
-  sort_order INT NOT NULL DEFAULT 0,
-  UNIQUE KEY uq_sp (segmento_code, pilar_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- restricción facultad → sede (solo facultades restringidas; ausencia de filas = sin restricción)
-CREATE TABLE facultad_sede (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  facultad_code VARCHAR(64) NOT NULL,
-  sede_code VARCHAR(64) NOT NULL,
-  UNIQUE KEY uq_fs (facultad_code, sede_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- grupo de ubicación → sedes miembro (para D3)
-CREATE TABLE ubicacion_group (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  group_code VARCHAR(64) NOT NULL,
-  member_sede_code VARCHAR(64) NOT NULL,
-  UNIQUE KEY uq_ug (group_code, member_sede_code)
+  uid INT NULL, created INT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ```
 
-> **Nota de dependencia (ADR-002):** los campos de código en `campaign`/`ad_set`/`ad` **no** llevan FK dura hacia `dict_value`. Son snapshots. La validación de que un código existe y está activo se hace en el **service de escritura**, no en la capa DB. Así se cumple "muy específico con las dependencias" sin acoplar históricos a la config mutable.
+> `utm_config` (default_url, meta_mode) **tampoco es una tabla** — es otro objeto de Configuration (`utp_nomenclaturas.utm_config`), igual razón que el diccionario en §6.3: es un singleton que conviene versionar con el módulo, no un registro transaccional.
+
+> **Nota de dependencia (ADR-002):** los campos de código en `campaign`/`ad_set`/`ad` **no** llevan FK dura hacia el diccionario. Son snapshots. La validación de que un código existe y está activo se hace en el **service de escritura** (`TreeManager.php`), no en la capa DB — así un nombre histórico nunca cambia aunque el diccionario se edite después.
+
+### 6.3 Diccionario y condicionales — Configuration, NO tablas SQL
+
+A diferencia de §6.2, el diccionario (segmento, campus, edad, facultad… y las condicionales D1-D4) **no vive en tablas separadas**. Se implementó como **un solo objeto de Configuration de Drupal** (`utp_nomenclaturas.dictionary`, YAML versionado en `config/install/`), leído/escrito por `DictionaryProvider.php`. Es una decisión de arquitectura, no un pendiente: viaja versionado con el módulo y se exporta con `drush cex`, algo que un set de tablas normalizadas no da gratis.
+
+En la práctica, todo lo que en un modelo relacional serían filas de `dict_value`/`etapa_option`/`segmento_pilar`/`facultad_sede` es, acá, una clave dentro de ese único YAML:
+
+| Si fuera tabla relacional... | ...en este sistema es esta clave del YAML |
+|---|---|
+| `dict_value` (una fila por valor de cada lista) | `lists.<segmento\|campus\|edad\|...>` (array) |
+| `etapa_option` (etapa → medio/objCamp/objPlat/tipoCamp) | `etapa_conditionals.<campo>.<etapa>` (array) |
+| `segmento_pilar` | `segmento_pilar.<segmento>` (array) |
+| `facultad_sede` (restricción D3/D4) | `campus_facultad.<facultad>` (array de sedes permitidas) |
+| `ubicacion_group` | `ubicacion_grupo.<grupo>` (array de sedes miembro) |
+
+Editar esto desde Configuración (Nivel 1/2/3 en el frontend) llama a `ConfigController.php`, que muta ese mismo objeto de Configuration vía `DictionaryProvider::addListValue()/updateEtapaOptions()/updateSegmentoPilar()/updateCampusFacultad()` — Drupal invalida su caché solo al guardar, así que el cambio se refleja de inmediato en el siguiente `GET /config`. **Si en algún momento se prefiere tener esto como tablas SQL de verdad** (por ejemplo, para hacer reportería con SQL directo), es un cambio de arquitectura documentado y acotado — no algo que ya esté a medio camino.
 
 ---
 
@@ -473,6 +425,28 @@ Inicio (KPIs) · Constructor (drill-down Pilar▸Campaña▸Conjunto▸Anuncio c
 ### 8.4 Mapeo local ↔ servidor
 El HTML usa nombres de campo en camelCase e identidad `id` (heredados de la herramienta original); la API responde snake_case e identidad `uuid` (`TreeController.php`). Tres funciones (`campaignFromApi`, `adSetFromApi`, `adFromApi`) traducen una forma a la otra, para no tener que tocar ninguna función de renderizado ya existente.
 
+### 8.5 Qué acción del frontend escribe en qué tabla
+
+La tabla siguiente es la respuesta directa a "¿qué tabla corresponde a qué cosa?" — cada fila es una acción real del `index.html`, con el archivo PHP y la tabla/config exactos que toca.
+
+| Acción en el frontend | Función en `index.html` | Controlador → Service (PHP) | Dónde persiste |
+|---|---|---|---|
+| "Agregar campaña" (Constructor) | `addCampaign()` | `TreeController::createCampaign` → `TreeManager::createCampaign` | `INSERT` en tabla **`campaign`** (§6.2) |
+| "Agregar conjunto" | `addGroup()` | `TreeController::createAdSet` → `TreeManager::createAdSet` | `INSERT` en tabla **`ad_set`**, con `campaign_id` (FK) |
+| "Agregar anuncio" | `addAd()` | `TreeController::createAd` → `TreeManager::createAd` | `INSERT` en tabla **`ad`**, con `ad_set_id` (FK) |
+| Editar nombre inline (Repositorio/Constructor) | `saveEdit()` | `TreeController::update{Campaign\|AdSet\|Ad}` | `UPDATE` de la fila correspondiente |
+| Eliminar (cualquier nivel) | `delCamp/delGroup/delAd` | `TreeController::delete{Campaign\|AdSet\|Ad}` | `DELETE` de la fila; Drupal hace la cascada (`ad_set`→`ad`, `campaign`→`ad_set`) solo, vía `ON_DELETE_CASCADE` |
+| Duplicar (cualquier nivel) | `dupCamp/dupGroup/dupAd` | `TreeController::duplicate{Campaign\|AdSet\|Ad}` → `TreeManager` | `INSERT` de una fila nueva por cada nodo copiado |
+| URL del anuncio (Nivel 3) | `setAdUrl()` | `TreeController::updateAd` | `UPDATE ad SET url=...` |
+| Guardar UTM manual | `saveManual()` | `UtmController::createManual` | `INSERT` en tabla **`manual_utm`** |
+| Eliminar UTM manual | `delUtm()` | `UtmController::deleteManual` | `DELETE` en `manual_utm` |
+| Cambiar modo macro/hard (UTMs) | toggle en `initUtm()` | `UtmController::updateUtmConfig` | Configuration `utp_nomenclaturas.utm_config` (§6.2) |
+| Agregar/quitar valor de una lista (Configuración N1/N3) | `addListItem/removeListItem` | `ConfigController::addListValue/deleteListValue` → `DictionaryProvider` | Configuration `utp_nomenclaturas.dictionary`, clave `lists.<campo>` (§6.3) |
+| Editar condicionales por etapa (Configuración N1, D1) | `addEtapaItem/removeEtapaItem` | `ConfigController::updateEtapaOptions` | Configuration, clave `etapa_conditionals.<campo>.<etapa>` |
+| Editar pilares por segmento (Configuración N1, D2) | `addPilarItem/removePilarItem` | `ConfigController::updateSegmentoPilar` | Configuration, clave `segmento_pilar.<segmento>` |
+| Matriz Campus×Facultad (Configuración N2, D4) | `toggleFacultadAtSede()` | `ConfigController::updateCampusFacultad` | Configuration, clave `campus_facultad.<facultad>` |
+| Restaurar backup JSON | import en Exportar | `ExportController::importBackup` → `BackupService::import` | `INSERT`/`UPDATE` en `campaign`/`ad_set`/`ad` (idempotente por `uuid`) |
+
 ---
 
 ## 9. Integración Drupal (módulo `utp_nomenclaturas`)
@@ -517,9 +491,6 @@ JSON:API cubre CRUD de entidades. Los `RestResource` custom cubren `/name/previe
 - Ruta admin: `/admin/utp/nomenclaturas` (permiso `access utp nomenclaturas`).
 - `csrfToken` es el mismo que exige el access checker core `_csrf_request_header_token` (`CsrfRequestHeaderAccessCheck`); el frontend lo envía como header `X-CSRF-Token` en toda mutación.
 - Permisos: `access utp nomenclaturas` (ver), `edit utp nomenclaturas` (crear/editar/eliminar), `administer utp nomenclaturas config` (diccionarios/matriz).
-
-### 9.6 Fallback headless (ADR-001, no primario)
-API standalone (Symfony/API Platform o Node/Express) + DB propia + SPA embebida por `iframe` con SSO. Solo si se requiere reutilizar el frontend fuera de Drupal. Implica CORS, auth puente y despliegue separado.
 
 ---
 

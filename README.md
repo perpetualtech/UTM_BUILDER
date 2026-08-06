@@ -67,6 +67,26 @@ duplicar, editar el diccionario en Configuración, UTMs manuales,
 exportar/restaurar backup) siguen exactamente el mismo patrón; cada una
 está comentada en `index.html` con qué endpoint llama.
 
+### Qué tabla corresponde a qué
+
+4 tablas MySQL reales, creadas por Drupal a partir de `src/Entity/*.php`
+(esquema completo con columnas en
+[`SDD-UTP-Nomenclaturas.md` §6](SDD-UTP-Nomenclaturas.md#6-esquema-de-base-de-datos)):
+
+| Tabla | Qué guarda |
+|---|---|
+| `campaign` | Campañas del Constructor |
+| `ad_set` | Conjuntos de anuncios (FK a `campaign`) |
+| `ad` | Anuncios (FK a `ad_set`) |
+| `manual_utm` | UTMs manuales (influencers/orgánico) |
+
+El diccionario (listas, condicionales D1-D4, matriz Campus×Facultad) **no
+es una tabla** — es un solo objeto de Configuration de Drupal
+(`utp_nomenclaturas.dictionary`), explicado con el mapeo exacto en el
+[§6.3 del SDD](SDD-UTP-Nomenclaturas.md#63-diccionario-y-condicionales--configuration-no-tablas-sql).
+La tabla completa de "qué acción del frontend escribe dónde" está en el
+[§8.5 del SDD](SDD-UTP-Nomenclaturas.md#85-qué-acción-del-frontend-escribe-en-qué-tabla).
+
 **Cómo comprobar que persiste de verdad:** crear una campaña y recargar la
 página (F5). Si siguiera en pantalla por `localStorage`, sobreviviría en
 ese navegador pero desaparecería en otro. Acá desaparece todo el estado de
