@@ -7,6 +7,10 @@ mantiene en el repo como fuente de verdad funcional) por un módulo Drupal
 con API REST propia y una página HTML/CSS/JavaScript plano (sin frameworks
 ni paso de build) que consume esa API.
 
+> **¿Solo querés entender frontend + API + tablas, sin entrar en detalle
+> técnico?** Ver [`COMO-FUNCIONA.md`](COMO-FUNCIONA.md) — una página,
+> sin jerga.
+
 ## Arquitectura
 
 | Carpeta | Qué es |
