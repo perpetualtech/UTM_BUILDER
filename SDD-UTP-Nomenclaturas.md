@@ -2,9 +2,9 @@
 ### Spec-Driven Development para reconstrucción full-stack y despliegue en Drupal
 
 > **Cómo leer este documento.**
-> Este documento describe cómo el *Constructor de Nomenclaturas* pasa de ser una herramienta en un solo archivo HTML (`UTP-Nomenclaturas.html`, la que UTP ya usa y valida hoy) a una solución full-stack sobre Drupal, sin cambiar ninguna regla de negocio en el camino: el HTML sigue siendo la *fuente de verdad funcional* — sus reglas y su diccionario ya están aprobados por UTP — y este `.md` documenta la arquitectura destino y cómo se llega a ella.
+> `UTP-Nomenclaturas.html` es la referencia funcional: reglas de negocio y diccionario ya validados en producción. Este `.md` especifica la arquitectura destino de esas mismas reglas — dominio, esquema de datos, contrato de API, frontend e integración con Drupal — sin alterarlas.
 >
-> Se organiza en tres bloques: **contexto y decisiones de arquitectura** (§0-1), **especificación técnica** — dominio, reglas de negocio, esquema de base de datos, API, frontend e integración con Drupal (§2-9) —, y **plan de entrega**, con la ruta de migración de datos y las fases de construcción junto con sus criterios de aceptación (§10-12). Los Anexos incluyen los datos semilla, constantes y paleta de diseño necesarios para implementar cada fase sin tener que volver al HTML original.
+> Tres bloques: **contexto y decisiones de arquitectura** (§0-1); **especificación técnica** — dominio, reglas de negocio, esquema de base de datos, API, frontend e integración con Drupal (§2-9); **plan de entrega** — migración de datos, fases de construcción y criterios de aceptación (§10-12). Los Anexos traen los datos semilla, constantes y paleta de diseño de referencia.
 
 ---
 
