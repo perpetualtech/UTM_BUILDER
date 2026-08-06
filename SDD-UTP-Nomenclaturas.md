@@ -363,43 +363,50 @@ Editar esto desde Configuración (Nivel 1/2/3 en el frontend) llama a `ConfigCon
 
 ---
 
-## 7. Contrato de API (REST / JSON:API)
+## 7. Contrato de API
 
-Base: `/api/utp-nomenclaturas/v1`. Auth: sesión Drupal + CSRF token en mutaciones. Respuestas JSON. Errores con `{error, code, details}`.
+Base: `/api/utp-nomenclaturas/v1`. Auth: sesión Drupal; toda ruta no-GET exige header `X-CSRF-Token`. Respuestas JSON; errores `{error, code, details}` (422 condicional inválida, 409 nombre duplicado, 404 no encontrado). Contrato completo y autoritativo:
+[`utp_nomenclaturas.routing.yml`](utp_nomenclaturas/utp_nomenclaturas.routing.yml) (32 rutas) — lo que sigue es su resumen legible.
 
 ### 7.1 Diccionario y configuración
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/config` | Bundle completo: listas + condicionales + mapas + `utm_config`. **Un solo fetch** para hidratar el frontend. |
-| `GET` | `/config/lists/{list_key}` | Valores de una lista. |
-| `POST` `PATCH` `DELETE` | `/config/lists/{list_key}/values[/{code}]` | CRUD de valores (Config Nivel 1/2/3). |
-| `PUT` | `/config/etapa-options/{etapa}/{field}` | Reemplaza opciones condicionadas por etapa. |
-| `PUT` | `/config/segmento-pilar/{segmento}` | Reemplaza pilares de un segmento. |
-| `PUT` | `/config/campus-facultad` | Actualiza matriz D4 (facultad→sede). |
-| `PUT` | `/config/utm` | `{default_url, meta_mode}`. |
+| Método | Ruta | Controller | Descripción |
+|---|---|---|---|
+| `GET` | `/config` | `UtmConfigController::getConfig` | Bundle completo (§9.2): listas + condicionales + mapas + presets UTM. Un solo fetch para hidratar el frontend. |
+| `GET` | `/config/lists/{list_key}` | `ConfigController::getListValues` | Valores de una lista. |
+| `POST` | `/config/lists/{list_key}/values` | `ConfigController::addListValue` | Agrega un valor. Body `{value}`. |
+| `DELETE` | `/config/lists/{list_key}/values/{code}` | `ConfigController::deleteListValue` | Quita un valor. |
+| `PUT` | `/config/etapa-options/{etapa}/{field}` | `ConfigController::updateEtapaOptions` | Reemplaza el array de opciones (D1). Body `{values}`. |
+| `PUT` | `/config/segmento-pilar/{segmento}` | `ConfigController::updateSegmentoPilar` | Reemplaza pilares del segmento (D2). Body `{pilares}`. |
+| `PUT` | `/config/campus-facultad` | `ConfigController::updateCampusFacultad` | Reemplaza la matriz D4. Body `{matrix}`. |
+| `GET` | `/utms/config` | `UtmController::getUtmConfig` | `{default_url, meta_mode}`. |
+| `PATCH` | `/utms/config` | `UtmController::updateUtmConfig` | Actualiza `{default_url, meta_mode}`. |
 
 ### 7.2 Árbol (campañas/conjuntos/anuncios)
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/campaigns?pillar=&medio=&q=` | Lista filtrable (con conteos de hijos). |
-| `GET` | `/campaigns/{uuid}?include=ad_sets.ads` | Árbol completo de una campaña. |
-| `POST` | `/campaigns` | Crea. Body = `meta` (códigos) + `pillar`. El server **deriva `name`**, valida unicidad y condicionales. |
-| `PATCH` `DELETE` | `/campaigns/{uuid}` | Editar nombre / eliminar (cascada). |
-| `POST` | `/campaigns/{uuid}/ad-sets` · `PATCH`/`DELETE` `/ad-sets/{uuid}` | Idem conjunto. |
-| `POST` | `/ad-sets/{uuid}/ads` · `PATCH`/`DELETE` `/ads/{uuid}` | Idem anuncio. `PATCH /ads/{uuid}` acepta `{url}`. |
-| `POST` | `/{level}/{uuid}/duplicate` | Duplicar (regenera uuids de hijos). |
+| Método | Ruta | Controller | Descripción |
+|---|---|---|---|
+| `GET` | `/campaigns?pillar=&medio=&q=` | `TreeController::listCampaigns` | Lista con `ad_sets_count`/`ads_count`. |
+| `GET` | `/campaigns/{uuid}?include=ad_sets,ads` | `TreeController::getCampaignTree` | Árbol completo de una campaña. |
+| `POST` | `/campaigns` | `::createCampaign` | Body `{pillar_code, meta}`. El server **deriva `name`** (`NameBuilder`), valida D1-D3 y unicidad. |
+| `PATCH` `DELETE` | `/campaigns/{uuid}` | `::updateCampaign` / `::deleteCampaign` | `PATCH` con `{name}` = override manual; con `{meta}` = re-deriva. `DELETE` cascada (`ad_set`→`ad`). |
+| `POST` | `/campaigns/{uuid}/duplicate` | `::duplicateCampaign` | Copia el subárbol completo; desambigua nombre con sufijo `-copia`. |
+| `POST` | `/campaigns/{uuid}/ad-sets` | `::createAdSet` | Idem conjunto (meta: `edad`/`ubicacion`/`facultad`/`senal`/`detalle`). |
+| `PATCH` `DELETE` | `/ad-sets/{uuid}` | `::updateAdSet` / `::deleteAdSet` | — |
+| `POST` | `/ad-sets/{uuid}/duplicate` | `::duplicateAdSet` | — |
+| `POST` | `/ad-sets/{uuid}/ads` | `::createAd` | Body `{meta, url}` (meta: `formato`/`concepto`/`motivo`/`mensaje`/`carrera`/`fecha`). |
+| `PATCH` `DELETE` | `/ads/{uuid}` | `::updateAd` / `::deleteAd` | `PATCH` acepta `{url}` solo (no forma parte del nombre). |
+| `POST` | `/ads/{uuid}/duplicate` | `::duplicateAd` | — |
 
-### 7.3 Derivados (RestResource custom)
-| Método | Ruta | Descripción |
-|---|---|---|
-| `POST` | `/name/preview` | `{level, values}` → `{name}`. Preview autoritativo. |
-| `GET` | `/utms/paid?medio=&pillar=&q=&metaMode=` | UTMs derivadas del árbol (agrupadas camp▸conj▸anuncio). |
-| `GET` `POST` `DELETE` | `/utms/manual` | CRUD UTM manual. |
-| `GET` | `/export/campaigns.xlsx?ids=&medio=&pillar=&q=` | Excel una hoja por plataforma. |
-| `GET` | `/export/utms.xlsx` | Excel UTMs (por source + consolidado). |
-| `GET` | `/export/backup.json` · `POST` `/import` | Backup / restore del árbol. |
-
-> **Validaciones server-side obligatorias** en POST/PATCH del árbol: unicidad (§3.3), condicionales (§3.2), existencia de códigos en diccionario activo. Devolver 409 en colisión de nombre, 422 en violación de condicional.
+### 7.3 UTMs y export/import
+| Método | Ruta | Controller | Descripción |
+|---|---|---|---|
+| `GET` | `/utms/paid` | `UtmController::listPaid` | Todas las UTMs derivadas, ya aplanadas (§3.4); filtro por medio/pilar/búsqueda se hace en el cliente. |
+| `GET` | `/utms/manual` | `::listManual` | — |
+| `POST` | `/utms/manual` | `::createManual` | Body `{utm_source, utm_medium, utm_campaign?, utm_term?, utm_content?, url, qs}`. |
+| `DELETE` | `/utms/manual/{uuid}` | `::deleteManual` | — |
+| `GET` | `/export/campaigns.xlsx?pillar=&medio=&q=&uuids[]=` | `ExportController::exportCampaigns` | Excel, una hoja por plataforma (§3.5). `uuids[]` fija selección explícita. |
+| `GET` | `/export/utms.xlsx` | `::exportUtms` | Excel UTMs: una hoja por `utm_source` + Consolidado. |
+| `GET` | `/export/backup.json` | `::exportBackup` | Backup del árbol, shape propio (uuid-based). |
+| `POST` | `/import` | `::importBackup` | Restaura backup — acepta shape propio **y** el legacy de `UTP-Nomenclaturas.html` (§10). Idempotente por `uuid`. |
 
 ---
 
@@ -451,39 +458,47 @@ La tabla siguiente es la respuesta directa a "¿qué tabla corresponde a qué co
 
 ## 9. Integración Drupal (módulo `utp_nomenclaturas`)
 
-### 9.1 Estructura del módulo
+### 9.1 Estructura del módulo (tal como está en el repo)
 ```
 utp_nomenclaturas/
   utp_nomenclaturas.info.yml
-  utp_nomenclaturas.routing.yml
-  utp_nomenclaturas.permissions.yml
-  utp_nomenclaturas.libraries.yml
+  utp_nomenclaturas.routing.yml          # 32 rutas, ver §7
+  utp_nomenclaturas.permissions.yml      # 3 permisos, ver §9.5
   utp_nomenclaturas.services.yml
-  config/install/                  # diccionarios + condicionales como config (seed)
+  utp_nomenclaturas.install              # hook_requirements/uninstall
+  utp_nomenclaturas.module
+  composer.json                          # phpoffice/phpspreadsheet
+  config/install/                        # diccionario + presets UTM + config UTM (seed, §9.2)
+  config/schema/                         # schema de esa Configuration
   src/
-    Entity/Campaign.php AdSet.php Ad.php ManualUtm.php
-    Service/NameBuilder.php UtmDeriver.php DictionaryProvider.php ExcelExporter.php BackupService.php
-    Plugin/rest/resource/NamePreviewResource.php UtmPaidResource.php ExportCampaignsResource.php ImportResource.php
-    Controller/AppController.php   # sirve el frontend (HTML plano, §8)
-    Commands/ImportCommand.php     # Drush: importar backup localStorage
-  frontend/index.html                # frontend: un solo HTML/CSS/JS, sin build (§8, ADR-004)
+    Entity/          Campaign.php AdSet.php Ad.php ManualUtm.php
+    Controller/       TreeController.php ConfigController.php UtmController.php
+                       UtmConfigController.php ExportController.php AppController.php
+    Service/          NameBuilder.php TreeManager.php DictionaryProvider.php
+                       UtmDeriver.php ExcelExporter.php BackupService.php
+    Exception/        UtpNomenclaturaException.php + 3 subclases (§7)
+    EventSubscriber/   UtpNomenclaturaExceptionSubscriber.php
+  frontend/index.html                    # frontend (§8, ADR-004)
 ```
+Sin JSON:API ni `RestResource` plugins: los 6 `Controller/*.php` son la API completa — más simple de leer y depurar que resolver el contrato genérico de JSON:API para un dominio con reglas de negocio propias (D1-D4).
 
 ### 9.2 Persistencia
-- **Content entities** para lo transaccional: `Campaign`, `AdSet`, `Ad`, `ManualUtm`. Base fields = columnas §6.2. Da JSON:API, revisiones y access control "gratis". Relaciones padre-hijo por `entity_reference` + borrado en cascada por lógica de entidad.
-- **Configuration** para los diccionarios y condicionales (`dict_*`, `etapa_option`, `segmento_pilar`, `facultad_sede`, `ubicacion_group`, `utm_config`): como *config entities* o simple config YAML en `config/install`. Ventaja: viaja versionada con el módulo y es exportable con `drush cex`.
-
-> Alternativa aceptable si se prefiere control total del SQL: tablas custom vía `hook_schema()` exactamente como §6, y `RestResource` para todo (sin JSON:API). Elegir **una** y ser consistente.
+- **Content entities** para lo transaccional: `Campaign`, `AdSet`, `Ad`, `ManualUtm` → tablas `campaign`/`ad_set`/`ad`/`manual_utm` (§6.2). Relaciones padre-hijo por `entity_reference` + borrado en cascada (`ON_DELETE_CASCADE`) nativo de la Entity API.
+- **Configuration** para diccionario y condicionales (`utp_nomenclaturas.dictionary`) y config de UTM (`utp_nomenclaturas.utm_config`) — YAML en `config/install`, editable en runtime vía `ConfigController`/`DictionaryProvider` (§6.3). Viaja versionado con el módulo, exportable con `drush cex`.
 
 ### 9.3 Servicios (lógica canónica)
-- `NameBuilder::build(level, values): string` → §3.1, único lugar donde vive el naming.
-- `UtmDeriver::derive(Campaign, AdSet, Ad): UtmRow` → §3.4, incluye `googleSub`, `metaMode`, `PLAT_PASTE`.
-- `DictionaryProvider` → expone el bundle, resuelve D1–D4, valida códigos.
-- `ExcelExporter` → usa **PhpSpreadsheet** (reemplazo server-side de SheetJS). Reglas §3.5.
-- `BackupService` → export/import del árbol (JSON compatible con el backup actual del HTML).
+- `NameBuilder::campaignName/adSetName/adName()` → §3.1, único lugar donde vive el naming.
+- `TreeManager` → CRUD + duplicate de los 3 niveles: valida (D1-D3), deriva nombre, persiste.
+- `DictionaryProvider` → expone el bundle (§9.2), resuelve D1–D4, valida códigos, muta Configuration (Config Nivel 1/2/3).
+- `UtmDeriver::derive()` → §3.4, incluye `googleSub`, `metaMode`, `PLAT_PASTE`.
+- `ExcelExporter` → **PhpSpreadsheet** (reemplazo server-side de SheetJS). Reglas §3.5.
+- `BackupService` → export/import del árbol, acepta el shape propio y el legacy de `UTP-Nomenclaturas.html` (§10).
 
-### 9.4 REST / JSON:API
-JSON:API cubre CRUD de entidades. Los `RestResource` custom cubren `/name/preview`, `/utms/paid`, `/export/*`, `/import`. Rutas y permisos en `*.routing.yml` / `*.permissions.yml`.
+### 9.4 Contrato REST
+6 `Controller/*.php`, sin JSON:API — contrato completo (32 rutas) en
+[`utp_nomenclaturas.routing.yml`](utp_nomenclaturas/utp_nomenclaturas.routing.yml)
+y detallado en §7/§8.5. Permisos por ruta en
+[`utp_nomenclaturas.permissions.yml`](utp_nomenclaturas/utp_nomenclaturas.permissions.yml).
 
 ### 9.5 Montaje del frontend + seguridad (revisado — ver ADR-004)
 - `AppController::app()` lee `frontend/index.html` como texto y lo devuelve tal cual como `Response` HTML cruda (no un render array de Drupal — la página ya trae su propio `<html><head><style>`, montarla dentro del theme de Drupal duplicaría el documento).
@@ -544,7 +559,7 @@ El HTML actual guarda en `localStorage`:
 
 | Capa | Paquetes |
 |---|---|
-| Drupal | Drupal 10.3+/11, `jsonapi` (core), `rest` (core), `phpoffice/phpspreadsheet` (composer), `drush` |
+| Drupal | Drupal 10.3+/11 core (sin `jsonapi`/`rest` — controllers/rutas propios, §9.4), `phpoffice/phpspreadsheet` (composer), `drush` |
 | Frontend | Ninguna — HTML/CSS/JavaScript plano (ADR-004); `xlsx.full.min.js` vía CDN solo para generar Excel en el navegador |
 | Dev | PHPUnit (kernel/unit para services) |
 

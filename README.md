@@ -75,25 +75,22 @@ estado proviene de un `GET` a MySQL, no de almacenamiento del cliente.
 - Drupal 10.3+ u 11 con MySQL
 - Un navegador — el frontend no requiere Node.js ni build
 
-## Instalación — backend
+## El módulo
 
-1. Copiar `utp_nomenclaturas/` a `modules/custom/` del sitio Drupal.
-2. Agregar la dependencia declarada en
-   [`utp_nomenclaturas/composer.json`](utp_nomenclaturas/composer.json)
-   (`phpoffice/phpspreadsheet`, exports de Excel).
-3. Copiar [`.env.example`](.env.example) a `.env` en la raíz del proyecto
-   Drupal y completar valores (ver [Variables de entorno](#variables-de-entorno)).
-4. Copiar [`settings.env.php`](settings.env.php) a
-   `sites/default/settings.env.php` y agregar al final de
-   `sites/default/settings.php`:
-   ```php
-   require DRUPAL_ROOT . '/sites/default/settings.env.php';
-   ```
-5. `drush en utp_nomenclaturas -y`
-6. Asignar permisos por rol (ver [Permisos](#permisos)).
+`utp_nomenclaturas/` es un módulo Drupal estándar — se integra con el
+proceso de deployment que ya use el equipo de UTP. Puntos a tener en
+cuenta al hacerlo:
 
-El builder queda en `/admin/utp/nomenclaturas`; `AppController.php` sirve
-`frontend/index.html` directo, sin paso de instalación aparte.
+- Dependencia de Composer: `phpoffice/phpspreadsheet` (exports de Excel),
+  declarada en [`composer.json`](utp_nomenclaturas/composer.json).
+- Variables de entorno que lee (ver [`.env.example`](.env.example) y
+  [Variables de entorno](#variables-de-entorno)); `settings.env.php` es
+  la referencia de cómo levantarlas en `settings.php`, si el hosting no
+  las inyecta ya por su cuenta.
+- 3 permisos propios (ver [Permisos](#permisos)).
+- Ruta admin `/admin/utp/nomenclaturas` — `AppController.php` sirve
+  `frontend/index.html` directo, sin paso de build ni instalación aparte
+  del propio módulo.
 
 ## Variables de entorno
 
