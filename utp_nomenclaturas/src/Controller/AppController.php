@@ -6,19 +6,20 @@ use Drupal\Core\Access\CsrfTokenGenerator;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Extension\ModuleExtensionList;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Monta la SPA (§9.5 del SDD): `<div id="utp-nomen-root">` + el build de
- * Vite (`utp-nomenclaturas-app/`) copiado a `js/dist/`.
+ * Sirve el builder como página HTML/CSS/JS plana (sin framework, sin paso
+ * de build) — `js/app/index.html`, una sola página autocontenida como
+ * `UTP-Nomenclaturas.html` original, pero con `fetch()` real contra
+ * `/api/utp-nomenclaturas/v1/*` en vez de `localStorage`.
  *
- * Vite hashea los nombres de archivo de salida, así que no se puede
- * declarar un `library` estático en `utp_nomenclaturas.libraries.yml` con
- * un `js:`/`css:` fijo. En su lugar se lee `js/dist/.vite/manifest.json`
- * en runtime (mismo patrón que usan Laravel/Rails/Django para montar SPAs
- * Vite) y se adjuntan las etiquetas reales vía `#attached.html_head`.
- *
- * Paso manual (sin CI en esta sesión): `cd utp-nomenclaturas-app && npm
- * run build`, luego copiar `dist/` a `utp_nomenclaturas/js/dist/`.
+ * Se devuelve como Response cruda (no un render array de Drupal): la
+ * página ya trae su propio `<html><head><style>`, así que montarla dentro
+ * del theme de administración de Drupal duplicaría el documento. El único
+ * dato que Drupal necesita inyectarle es la URL base de la API y el token
+ * CSRF, vía `window.UTP_SETTINGS` (ver la capa "CAPA DE COMUNICACIÓN CON
+ * EL BACKEND" al inicio del `<script>` del archivo).
  */
 class AppController extends ControllerBase {
 
@@ -39,60 +40,41 @@ class AppController extends ControllerBase {
   /**
    * GET /admin/utp/nomenclaturas.
    */
-  public function app(): array {
-    $modulePath = $this->moduleExtensionList->getPath('utp_nomenclaturas');
-    $manifestPath = \DRUPAL_ROOT . '/' . $modulePath . '/js/dist/.vite/manifest.json';
+  public function app(): Response {
+    $modulePath = \DRUPAL_ROOT . '/' . $this->moduleExtensionList->getPath('utp_nomenclaturas');
+    $appPath = $modulePath . '/js/app/index.html';
 
-    $build = [
-      '#markup' => '<div id="utp-nomen-root"></div>',
-      '#attached' => [
-        'drupalSettings' => [
-          'utpNomenclaturas' => [
-            'apiBase' => self::API_BASE,
-            // Sin argumento (seed vacío) — es el mismo token que valida
-            // el access checker core `_csrf_request_header_token`
-            // (`CsrfRequestHeaderAccessCheck`), el que también genera la
-            // ruta core `/session/token`.
-            'csrfToken' => $this->csrfToken->get(),
-          ],
-        ],
-      ],
-    ];
-
-    if (!is_file($manifestPath)) {
-      $build['#markup'] .= '<p><em>Build de Vite no encontrado — corré "npm run build" en utp-nomenclaturas-app/ y copiá dist/ a js/dist/.</em></p>';
-      return $build;
+    if (!is_file($appPath)) {
+      return new Response(
+        '<p style="font-family:sans-serif;padding:40px">No se encontró js/app/index.html del módulo utp_nomenclaturas.</p>',
+        500
+      );
     }
 
-    $manifest = json_decode(file_get_contents($manifestPath), TRUE) ?? [];
-    $entry = NULL;
-    foreach ($manifest as $chunk) {
-      if (!empty($chunk['isEntry'])) {
-        $entry = $chunk;
-        break;
-      }
+    $settings = json_encode([
+      'apiBase' => self::API_BASE,
+      // Sin argumento (seed vacío) — es el mismo token que valida el
+      // access checker core `_csrf_request_header_token`
+      // (`CsrfRequestHeaderAccessCheck`), el que también genera la ruta
+      // core `/session/token`.
+      'csrfToken' => $this->csrfToken->get(),
+    ], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+
+    $html = file_get_contents($appPath);
+    $html = str_replace(
+      '<body>',
+      '<body>' . "\n" . '<script>window.UTP_SETTINGS=' . $settings . ';</script>',
+      $html,
+      $count
+    );
+    if ($count === 0) {
+      // No se encontró <body> — servir igual, sin settings inyectadas
+      // (la app cae a la ruta relativa por defecto de la API, ver
+      // apiFetch() en el archivo).
+      $html = file_get_contents($appPath);
     }
 
-    if ($entry === NULL) {
-      $build['#markup'] .= '<p><em>manifest.json sin entry point — build de Vite inválido.</em></p>';
-      return $build;
-    }
-
-    $assetsBase = \base_path() . $modulePath . '/js/dist/';
-    $tags = [];
-    foreach ($entry['css'] ?? [] as $css) {
-      $tags[] = ['#tag' => 'link', '#attributes' => ['rel' => 'stylesheet', 'href' => $assetsBase . $css]];
-    }
-    $tags[] = [
-      '#tag' => 'script',
-      '#attributes' => ['type' => 'module', 'src' => $assetsBase . $entry['file']],
-    ];
-
-    foreach ($tags as $i => $tag) {
-      $build['#attached']['html_head'][] = [$tag, 'utp_nomenclaturas_app_asset_' . $i];
-    }
-
-    return $build;
+    return new Response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8']);
   }
 
 }

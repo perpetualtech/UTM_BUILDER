@@ -1,5 +1,0 @@
-# Vite hashea los nombres de archivo de build, así que no se puede
-# declarar un `js:`/`css:` estático acá (los hashes cambian en cada
-# build). AppController::app() (Fase 4, §9.5) lee js/dist/.vite/
-# manifest.json en runtime y adjunta las etiquetas <script type=module>/
-# <link> reales vía #attached.html_head — no hay library que registrar.

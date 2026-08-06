@@ -28,7 +28,7 @@
 **Recomendado (primario).** Un único módulo custom `utp_nomenclaturas` para **Drupal 10/11** que contiene:
 - La **capa de datos** (content entities + configuration entities en MySQL, vía Entity API).
 - La **API** (JSON:API para CRUD de entidades + `RestResource` plugins para lo derivado: preview de nombre, UTMs paid, export, import).
-- La **SPA React** empaquetada como *Drupal library* y montada en una ruta admin.
+- El **frontend** (§8): una sola página HTML/CSS/JavaScript plano — sin framework ni paso de build — servida directo por un controlador de la misma ruta admin.
 
 *Por qué:* "montar en Drupal" = **habilitar el módulo**. Sin servidor aparte, sin SSO ni CORS entre dominios, sin duplicar auth. La config (diccionarios) viaja versionada con el módulo. Es el patrón *progressively decoupled Drupal*, estándar y soportado.
 
@@ -40,8 +40,8 @@ El nombre de campaña/conjunto/anuncio se deriva de los códigos seleccionados *
 ### ADR-003 · Derivación canónica en el backend
 `NameBuilder` y `UtmDeriver` viven en el backend (PHP service). El frontend puede replicar el `slug()` para preview instantáneo, pero **el servidor es autoritativo** al escribir. Evita divergencia de reglas entre cliente y servidor.
 
-### ADR-004 · Stack frontend — **React + TypeScript + Vite**
-Componentización, tipado del dominio, y build a estático que Drupal sirve como library. Aplicar skills internas: **`folder-structure`** (Screaming Architecture modular por feature) y **`react-doctor`** como gate final de cada fase de frontend.
+### ADR-004 · Stack frontend — **HTML/CSS/JavaScript plano, sin framework**
+*Revisado tras la primera entrega:* el equipo de UTP que va a mantener esta herramienta no trabaja con React, así que un stack con build propio (npm, TypeScript, bundler) es un costo de mantenimiento que no aporta valor acá. El frontend es **un solo archivo HTML** (`utp_nomenclaturas/js/app/index.html`, mismo patrón que `UTP-Nomenclaturas.html`, la herramienta que UTP ya usa hoy), con `fetch()` real contra la API del §7 en vez de `localStorage`. Se edita y se recarga — no hay `npm install` ni paso de build. La lógica de negocio sigue siendo autoritativa en el backend (ADR-003); el frontend solo hace preview y llama a la API.
 
 ---
 
@@ -453,81 +453,25 @@ Base: `/api/utp-nomenclaturas/v1`. Auth: sesión Drupal + CSRF token en mutacion
 
 ## 8. Arquitectura frontend
 
-### 8.1 Stack y principios
-- **React 18 + TypeScript + Vite.** Estado servidor con **TanStack Query**; estado UI local con **Zustand** (o `useReducer` por feature). Sin `localStorage` para datos (solo cache efímero de UI).
-- **Estructura modular por feature** (skill `folder-structure` · Screaming Architecture).
-- **Design tokens = paleta UTP** (Anexo C). Mantener identidad UTP (rojo `#E4002B`), **no** Perpetual.
-- Gate de calidad: correr `react-doctor` al cerrar cada fase de frontend.
+### 8.1 Stack y principios (revisado — ver ADR-004)
+- **Un solo archivo HTML/CSS/JavaScript, sin framework ni build.** `utp_nomenclaturas/js/app/index.html`: mismo layout/CSS que `UTP-Nomenclaturas.html` (la herramienta que UTP ya conoce), con el `<script>` reescrito para hablar con la API del §7 en vez de `localStorage`.
+- **Cero dependencias de paquetes** salvo `xlsx.full.min.js` (CDN), usado solo para generar los `.xlsx` en el navegador — igual que en la herramienta original.
+- **Sin `localStorage` para datos de negocio.** El estado en memoria (`campaigns`, `D`, `utmStore`, `utmCfg`) es una copia de lo último que respondió el servidor; se reconstruye desde cero en cada carga de página vía `fetch()`.
+- **El servidor sigue siendo autoritativo** (ADR-003): el frontend deriva el nombre localmente solo para la vista previa instantánea; la fuente de verdad es la respuesta de la API tras guardar.
 
-### 8.2 Árbol de componentes (mapeo 1:1 con las vistas actuales)
+### 8.2 La "capa de comunicación con el backend"
+Al principio del `<script>` de `index.html` hay un bloque comentado explícitamente para que cualquiera (no solo quien lea código) entienda el camino completo request→respuesta:
+- `apiFetch(path, {method, body})` — único punto de contacto con PHP: arma la URL (`API_BASE` + `path`), agrega el header CSRF en mutaciones, parsea la respuesta y convierte errores HTTP en una `ApiError` con el mismo `{error, code, details}` que emite `UtpNomenclaturaExceptionSubscriber.php`.
+- `apiGet/apiPost/apiPatch/apiPut/apiDelete` — atajos sobre `apiFetch()` por verbo.
+- `API_BASE`/`CSRF_TOKEN` — leídos de `window.UTP_SETTINGS`, que `AppController::app()` (§9.5) inyecta en el HTML al servirlo.
 
-```mermaid
-graph TD
-  App --> Shell
-  Shell --> Sidebar
-  Shell --> Topbar
-  Shell --> Router
-  Router --> Dashboard
-  Router --> Builder
-  Router --> Repository
-  Router --> UtmModule
-  Router --> ExportView
-  Router --> ConfigView
-  Router --> DictionaryView
+Cada función de negocio (`addCampaign`, `saveEdit`, `delCamp`, `addListItem`, `saveManual`, etc.) es `async`, llama a uno de estos helpers, y actualiza la pantalla **solo** con lo que el servidor confirmó — nunca asume que una escritura tuvo éxito de antemano.
 
-  Builder --> PillarTabs
-  Builder --> Breadcrumb
-  Builder --> CampaignForm
-  Builder --> AdSetForm
-  Builder --> AdForm
-  Builder --> LivePreview
-  Builder --> ChildrenTable
+### 8.3 Vistas (sin cambios respecto a `UTP-Nomenclaturas.html`)
+Inicio (KPIs) · Constructor (drill-down Pilar▸Campaña▸Conjunto▸Anuncio con preview en vivo) · Repositorio (árbol filtrable + edición inline) · UTMs (paid automático + manual) · Exportar (Excel + backup/restore JSON) · Configuración (Nivel 1/2/3: listas, condicionales D1/D2, matriz D4) · Diccionario (referencia, solo lectura). Cada vista es una `<section class="view">` que se muestra/oculta con CSS; no hay router ni recarga de página al navegar entre ellas.
 
-  UtmModule --> UtmPaidTree
-  UtmModule --> UtmManualForm
-  UtmModule --> UtmManualList
-
-  ConfigView --> ConfigLevel1
-  ConfigView --> ConfigLevel2
-  ConfigView --> ConfigLevel3
-  ConfigLevel2 --> CampusFacultadMatrix
-
-  subgraph shared
-    FieldSelect
-    ListChipEditor
-    TreeNode
-    EditableRow
-    KpiTile
-    Toast
-    Card
-  end
-```
-
-### 8.3 Estructura de carpetas (propuesta)
-
-```
-src/
-  app/                 # router, providers, layout Shell
-  shared/
-    ui/                # Card, KpiTile, Toast, Table, TreeNode, EditableRow, FieldSelect, ListChipEditor
-    lib/                # slug(), joinUrl(), http client, csrf
-    types/               # Campaign, AdSet, Ad, DictBundle, UtmRow (dominio tipado)
-  features/
-    dashboard/
-    builder/           # hooks useDependentOptions, useNamePreview; forms; children table
-    repository/         # árbol filtrable + edición inline
-    utm/                # paid tree + manual form/list
-    export/            # filtros + selector + acciones
-    config/            # 3 niveles + matriz
-    dictionary/        # referencia (read-only)
-  api/                 # queries/mutations TanStack por recurso
-```
-
-### 8.4 Hooks clave (la lógica condicional del builder)
-- `useDictBundle()` → carga `/config` una vez, cachea.
-- `useDependentOptions(level, currentValues)` → resuelve D1/D2/D3 en cliente (mismas reglas §3.2) para poblar/deshabilitar selects. Fuente de datos = bundle.
-- `useNamePreview(level, values)` → preview local con `slug()` compartido; en submit, el server revalida.
-- Cada `FieldSelect` recibe sus opciones ya filtradas por el hook; nunca decide sola.
+### 8.4 Mapeo local ↔ servidor
+El HTML usa nombres de campo en camelCase e identidad `id` (heredados de la herramienta original); la API responde snake_case e identidad `uuid` (`TreeController.php`). Tres funciones (`campaignFromApi`, `adSetFromApi`, `adFromApi`) traducen una forma a la otra, para no tener que tocar ninguna función de renderizado ya existente.
 
 ---
 
@@ -546,9 +490,9 @@ utp_nomenclaturas/
     Entity/Campaign.php AdSet.php Ad.php ManualUtm.php
     Service/NameBuilder.php UtmDeriver.php DictionaryProvider.php ExcelExporter.php BackupService.php
     Plugin/rest/resource/NamePreviewResource.php UtmPaidResource.php ExportCampaignsResource.php ImportResource.php
-    Controller/AppController.php   # sirve el contenedor SPA
+    Controller/AppController.php   # sirve el frontend (HTML plano, §8)
     Commands/ImportCommand.php     # Drush: importar backup localStorage
-  js/dist/                         # build Vite de la SPA (library)
+  js/app/index.html                # frontend: un solo HTML/CSS/JS, sin build (§8, ADR-004)
 ```
 
 ### 9.2 Persistencia
@@ -567,10 +511,11 @@ utp_nomenclaturas/
 ### 9.4 REST / JSON:API
 JSON:API cubre CRUD de entidades. Los `RestResource` custom cubren `/name/preview`, `/utms/paid`, `/export/*`, `/import`. Rutas y permisos en `*.routing.yml` / `*.permissions.yml`.
 
-### 9.5 Montaje de la SPA + seguridad
-- `AppController::app()` devuelve un `#markup` con `<div id="utp-nomen-root">` y adjunta la library `utp_nomenclaturas/app`.
+### 9.5 Montaje del frontend + seguridad (revisado — ver ADR-004)
+- `AppController::app()` lee `js/app/index.html` como texto y lo devuelve tal cual como `Response` HTML cruda (no un render array de Drupal — la página ya trae su propio `<html><head><style>`, montarla dentro del theme de Drupal duplicaría el documento).
+- Antes de devolverlo, inyecta `<script>window.UTP_SETTINGS={apiBase,csrfToken}</script>` justo después de `<body>` — es lo único que el HTML necesita de Drupal; todo el resto (`apiFetch()` y el resto de la "capa de comunicación con el backend", §8.2) vive en el propio archivo.
 - Ruta admin: `/admin/utp/nomenclaturas` (permiso `access utp nomenclaturas`).
-- `drupalSettings` inyecta `apiBase` + `csrfToken`. El http client del frontend envía `X-CSRF-Token` en mutaciones.
+- `csrfToken` es el mismo que exige el access checker core `_csrf_request_header_token` (`CsrfRequestHeaderAccessCheck`); el frontend lo envía como header `X-CSRF-Token` en toda mutación.
 - Permisos: `access utp nomenclaturas` (ver), `edit utp nomenclaturas` (crear/editar/eliminar), `administer utp nomenclaturas config` (diccionarios/matriz).
 
 ### 9.6 Fallback headless (ADR-001, no primario)
@@ -605,15 +550,20 @@ El HTML actual guarda en `localStorage`:
 
 **Fase 2 · Frontend base**
 - Shell + Dashboard + Builder (drill-down, dependent selects, preview, children table) + Repository. Tokens UTP.
-- *AC:* crear campaña▸conjunto▸anuncio end-to-end contra la API; nombres idénticos a los del HTML de referencia; `react-doctor` sin hallazgos críticos.
+- *AC:* crear campaña▸conjunto▸anuncio end-to-end contra la API; nombres idénticos a los del HTML de referencia.
+- *Nota:* implementada originalmente en React (§8/ADR-004 de esa primera entrega); reemplazada por completo en la **Fase 5** por HTML/CSS/JS plano — ver ADR-004 vigente y §8.
 
 **Fase 3 · UTM + Export/Import**
 - `UtmDeriver` + vistas Paid/Manual; `ExcelExporter` (PhpSpreadsheet) con reglas §3.5; backup/import.
 - *AC:* el Excel por plataforma reproduce columnas/orden/celdas-vacías del HTML; UTMs derivadas coinciden campo a campo en macro y hard mode.
 
 **Fase 4 · Config + Diccionario + empaquetado Drupal**
-- Config Nivel 1/2/3 + matriz Campus×Facultad editables; Dictionary read-only; library mount, permisos, CSRF, ruta admin.
+- Config Nivel 1/2/3 + matriz Campus×Facultad editables; Dictionary read-only; permisos, CSRF, ruta admin.
 - *AC:* editar la matriz impacta D3 en vivo; módulo instalable en limpio; migración de un backup real del HTML sin pérdida.
+
+**Fase 5 · Frontend sin framework (reemplaza el de la Fase 2)**
+- El cliente (UTP) no maneja React — su equipo necesita poder abrir y editar el frontend sin instalar Node/npm ni entender un build. Se reemplaza la SPA React de la Fase 2 por `utp_nomenclaturas/js/app/index.html`: un solo HTML/CSS/JS que cubre las mismas 7 vistas, con `fetch()` real contra la API (§7) en el lugar de `localStorage`. El backend (Fases 0-4) no cambia — es la misma API REST, ahora consumida por HTML plano en vez de React.
+- *AC:* crear/editar/eliminar/duplicar campaña▸conjunto▸anuncio persiste y sobrevive a un reload completo de la página (prueba de que ya no depende de `localStorage`); editar Configuración (listas, condicionales, matriz D4) también persiste y sobrevive a un reload; exportar el backup y volver a importarlo no duplica datos (idempotente).
 
 **Gate final:** correr `verificador-produccion-agentica` (Launch Gate) sobre el repo antes de entregar a UTP.
 
@@ -624,8 +574,8 @@ El HTML actual guarda en `localStorage`:
 | Capa | Paquetes |
 |---|---|
 | Drupal | Drupal 10.3+/11, `jsonapi` (core), `rest` (core), `phpoffice/phpspreadsheet` (composer), `drush` |
-| Frontend | `react` `react-dom` `typescript` `vite` `@tanstack/react-query` `zustand` `react-router-dom` |
-| Dev | `vitest`/`jest`, `eslint`, `prettier`, PHPUnit (kernel/unit para services) |
+| Frontend | Ninguna — HTML/CSS/JavaScript plano (ADR-004); `xlsx.full.min.js` vía CDN solo para generar Excel en el navegador |
+| Dev | PHPUnit (kernel/unit para services) |
 
 ---
 
