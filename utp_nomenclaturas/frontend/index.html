@@ -555,33 +555,14 @@ const PLATFORMS=['Meta','Tiktok','DV360','LinkedIn','GoogleAds'];
 const SEDES_ESPECIFICAS=['lima-centro','lima-norte','lima-sur','lima-este-ate','lima-este-sjl','arequipa','chiclayo','iquitos','pucallpa','tacna','piura','chimbote','ica','huancayo','trujillo'];
 const SEDE_GRUPO={'lima-centro':'Lima','lima-norte':'Lima','lima-sur':'Lima','lima-este-ate':'Lima','lima-este-sjl':'Lima','arequipa':'Líderes','chiclayo':'Líderes','iquitos':'Líderes','pucallpa':'Líderes','tacna':'Líderes','piura':'Def & Chall','chimbote':'Def & Chall','ica':'Def & Chall','huancayo':'Def & Chall','trujillo':'Def & Chall'};
 
-/* ════════════════════════════════════════════════════════════════════
-   CAPA DE COMUNICACIÓN CON EL BACKEND (JS → PHP → MySQL)
-   ════════════════════════════════════════════════════════════════════
-   Todo lo que este archivo necesita guardar (una campaña, un valor del
-   diccionario, una UTM manual…) pasa por las funciones de acá abajo.
-   Ninguna dato de negocio se guarda en localStorage: cada función hace
-   un fetch() real a una URL de la API (servida por el módulo Drupal
-   "utp_nomenclaturas", carpeta utp_nomenclaturas/src/Controller/*.php),
-   que a su vez usa la Entity API de Drupal para leer/escribir en MySQL.
-
-   Camino completo de un "Guardar", por ejemplo al crear una campaña:
-     1. El usuario hace clic en "Agregar campaña" → addCampaign() (abajo).
-     2. addCampaign() llama a apiPost('/campaigns', {...}).
-     3. apiPost hace fetch(API_BASE+'/campaigns', {method:'POST', ...}).
-     4. Drupal enruta esa URL a TreeController::createCampaign() (PHP),
-        que valida los datos y llama a TreeManager::createCampaign().
-     5. TreeManager crea una entidad Campaign de Drupal y la guarda:
-        $campaign->save() — esto es lo que efectivamente hace el INSERT
-        en la tabla MySQL de la entidad (Drupal genera el SQL).
-     6. El controlador PHP responde con JSON (la campaña ya con su id
-        real de base de datos). addCampaign() usa esa respuesta para
-        actualizar lo que se ve en pantalla.
-   Si en el paso 4 algo no cumple una regla de negocio (ej. un campus
-   que no existe), PHP responde con un error (código 422/409/404) y
-   apiFetch() lo convierte en una excepción que cada función atrapa
-   para mostrar un toast — nunca se guarda nada a medias.
-   ════════════════════════════════════════════════════════════════════ */
+/* ── Capa de comunicación con la API (Drupal, módulo utp_nomenclaturas) ──
+   Todo estado de negocio (campañas, diccionario, UTMs manuales) se lee y
+   escribe acá; nada persiste en localStorage. Cada mutación recorre
+   fetch() → Controller (src/Controller/*.php) → Service → Entity API →
+   MySQL, y responde con la entidad ya persistida. Errores de negocio
+   (422/409/404) llegan como ApiError; cada caller decide cómo mostrarlos
+   — no hay escritura parcial. Ver ARQUITECTURA.md para la traza completa
+   de un caso (crear campaña) y el mapeo acción→tabla. */
 
 /** Base de la API. Cuando esta página la sirve Drupal (AppController.php)
  *  viene inyectada en window.UTP_SETTINGS; si se abre suelta (sin Drupal),

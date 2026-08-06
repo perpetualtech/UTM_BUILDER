@@ -37,7 +37,7 @@ El nombre de campaña/conjunto/anuncio se deriva de los códigos seleccionados *
 `NameBuilder` y `UtmDeriver` viven en el backend (PHP service). El frontend puede replicar el `slug()` para preview instantáneo, pero **el servidor es autoritativo** al escribir. Evita divergencia de reglas entre cliente y servidor.
 
 ### ADR-004 · Stack frontend — **HTML/CSS/JavaScript plano, sin framework**
-*Revisado tras la primera entrega:* el equipo de UTP que va a mantener esta herramienta no trabaja con React, así que un stack con build propio (npm, TypeScript, bundler) es un costo de mantenimiento que no aporta valor acá. El frontend es **un solo archivo HTML** (`utp_nomenclaturas/js/app/index.html`, mismo patrón que `UTP-Nomenclaturas.html`, la herramienta que UTP ya usa hoy), con `fetch()` real contra la API del §7 en vez de `localStorage`. Se edita y se recarga — no hay `npm install` ni paso de build. La lógica de negocio sigue siendo autoritativa en el backend (ADR-003); el frontend solo hace preview y llama a la API.
+*Revisado tras la primera entrega:* el equipo de UTP que va a mantener esta herramienta no trabaja con React, así que un stack con build propio (npm, TypeScript, bundler) es un costo de mantenimiento que no aporta valor acá. El frontend es **un solo archivo HTML** (`utp_nomenclaturas/frontend/index.html`, mismo patrón que `UTP-Nomenclaturas.html`, la herramienta que UTP ya usa hoy), con `fetch()` real contra la API del §7 en vez de `localStorage`. Se edita y se recarga — no hay `npm install` ni paso de build. La lógica de negocio sigue siendo autoritativa en el backend (ADR-003); el frontend solo hace preview y llama a la API.
 
 ---
 
@@ -406,7 +406,7 @@ Base: `/api/utp-nomenclaturas/v1`. Auth: sesión Drupal + CSRF token en mutacion
 ## 8. Arquitectura frontend
 
 ### 8.1 Stack y principios (revisado — ver ADR-004)
-- **Un solo archivo HTML/CSS/JavaScript, sin framework ni build.** `utp_nomenclaturas/js/app/index.html`: mismo layout/CSS que `UTP-Nomenclaturas.html` (la herramienta que UTP ya conoce), con el `<script>` reescrito para hablar con la API del §7 en vez de `localStorage`.
+- **Un solo archivo HTML/CSS/JavaScript, sin framework ni build.** `utp_nomenclaturas/frontend/index.html`: mismo layout/CSS que `UTP-Nomenclaturas.html` (la herramienta que UTP ya conoce), con el `<script>` reescrito para hablar con la API del §7 en vez de `localStorage`.
 - **Cero dependencias de paquetes** salvo `xlsx.full.min.js` (CDN), usado solo para generar los `.xlsx` en el navegador — igual que en la herramienta original.
 - **Sin `localStorage` para datos de negocio.** El estado en memoria (`campaigns`, `D`, `utmStore`, `utmCfg`) es una copia de lo último que respondió el servidor; se reconstruye desde cero en cada carga de página vía `fetch()`.
 - **El servidor sigue siendo autoritativo** (ADR-003): el frontend deriva el nombre localmente solo para la vista previa instantánea; la fuente de verdad es la respuesta de la API tras guardar.
@@ -466,7 +466,7 @@ utp_nomenclaturas/
     Plugin/rest/resource/NamePreviewResource.php UtmPaidResource.php ExportCampaignsResource.php ImportResource.php
     Controller/AppController.php   # sirve el frontend (HTML plano, §8)
     Commands/ImportCommand.php     # Drush: importar backup localStorage
-  js/app/index.html                # frontend: un solo HTML/CSS/JS, sin build (§8, ADR-004)
+  frontend/index.html                # frontend: un solo HTML/CSS/JS, sin build (§8, ADR-004)
 ```
 
 ### 9.2 Persistencia
@@ -486,7 +486,7 @@ utp_nomenclaturas/
 JSON:API cubre CRUD de entidades. Los `RestResource` custom cubren `/name/preview`, `/utms/paid`, `/export/*`, `/import`. Rutas y permisos en `*.routing.yml` / `*.permissions.yml`.
 
 ### 9.5 Montaje del frontend + seguridad (revisado — ver ADR-004)
-- `AppController::app()` lee `js/app/index.html` como texto y lo devuelve tal cual como `Response` HTML cruda (no un render array de Drupal — la página ya trae su propio `<html><head><style>`, montarla dentro del theme de Drupal duplicaría el documento).
+- `AppController::app()` lee `frontend/index.html` como texto y lo devuelve tal cual como `Response` HTML cruda (no un render array de Drupal — la página ya trae su propio `<html><head><style>`, montarla dentro del theme de Drupal duplicaría el documento).
 - Antes de devolverlo, inyecta `<script>window.UTP_SETTINGS={apiBase,csrfToken}</script>` justo después de `<body>` — es lo único que el HTML necesita de Drupal; todo el resto (`apiFetch()` y el resto de la "capa de comunicación con el backend", §8.2) vive en el propio archivo.
 - Ruta admin: `/admin/utp/nomenclaturas` (permiso `access utp nomenclaturas`).
 - `csrfToken` es el mismo que exige el access checker core `_csrf_request_header_token` (`CsrfRequestHeaderAccessCheck`); el frontend lo envía como header `X-CSRF-Token` en toda mutación.
@@ -533,7 +533,7 @@ El HTML actual guarda en `localStorage`:
 - *AC:* editar la matriz impacta D3 en vivo; módulo instalable en limpio; migración de un backup real del HTML sin pérdida.
 
 **Fase 5 · Frontend sin framework (reemplaza el de la Fase 2)**
-- El cliente (UTP) no maneja React — su equipo necesita poder abrir y editar el frontend sin instalar Node/npm ni entender un build. Se reemplaza la SPA React de la Fase 2 por `utp_nomenclaturas/js/app/index.html`: un solo HTML/CSS/JS que cubre las mismas 7 vistas, con `fetch()` real contra la API (§7) en el lugar de `localStorage`. El backend (Fases 0-4) no cambia — es la misma API REST, ahora consumida por HTML plano en vez de React.
+- El cliente (UTP) no maneja React — su equipo necesita poder abrir y editar el frontend sin instalar Node/npm ni entender un build. Se reemplaza la SPA React de la Fase 2 por `utp_nomenclaturas/frontend/index.html`: un solo HTML/CSS/JS que cubre las mismas 7 vistas, con `fetch()` real contra la API (§7) en el lugar de `localStorage`. El backend (Fases 0-4) no cambia — es la misma API REST, ahora consumida por HTML plano en vez de React.
 - *AC:* crear/editar/eliminar/duplicar campaña▸conjunto▸anuncio persiste y sobrevive a un reload completo de la página (prueba de que ya no depende de `localStorage`); editar Configuración (listas, condicionales, matriz D4) también persiste y sobrevive a un reload; exportar el backup y volver a importarlo no duplica datos (idempotente).
 
 **Gate final:** correr `verificador-produccion-agentica` (Launch Gate) sobre el repo antes de entregar a UTP.

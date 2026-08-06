@@ -1,183 +1,142 @@
 # UTP · Constructor de Nomenclaturas
 
-Herramienta para estandarizar la nomenclatura de campañas, conjuntos de
-anuncios y anuncios de UTP, y derivar automáticamente sus parámetros UTM.
-Reemplaza la herramienta de referencia en un solo archivo HTML (que se
-mantiene en el repo como fuente de verdad funcional) por un módulo Drupal
-con API REST propia y una página HTML/CSS/JavaScript plano (sin frameworks
-ni paso de build) que consume esa API.
+Estandariza la nomenclatura de campañas, conjuntos de anuncios y anuncios
+de UTP, y deriva sus parámetros UTM. Sustituye la herramienta de
+referencia de archivo único (`UTP-Nomenclaturas.html`, que se conserva en
+el repo como fuente de verdad de las reglas de negocio) por un módulo
+Drupal con API REST propia y un frontend HTML/CSS/JS sin dependencias.
 
-> **¿Solo querés entender frontend + API + tablas, sin entrar en detalle
-> técnico?** Ver [`COMO-FUNCIONA.md`](COMO-FUNCIONA.md) — una página,
-> sin jerga.
+Ver [`ARQUITECTURA.md`](ARQUITECTURA.md) para el mapeo frontend↔API↔tablas.
 
 ## Arquitectura
 
-| Carpeta | Qué es |
+| Carpeta | Contenido |
 |---|---|
-| [`utp_nomenclaturas/`](utp_nomenclaturas) | Módulo Drupal 10.3+/11: entidades de contenido (Campaña, Conjunto, Anuncio, UTM manual) guardadas en MySQL, diccionario y reglas de negocio como Configuration API, API REST bajo `/api/utp-nomenclaturas/v1/*`. |
-| [`utp_nomenclaturas/js/app/index.html`](utp_nomenclaturas/js/app/index.html) | El frontend completo: un solo archivo HTML + CSS + JavaScript (sin React, sin build), servido directamente por el módulo en `/admin/utp/nomenclaturas`. Es el mismo diseño de `UTP-Nomenclaturas.html`, pero en vez de guardar en `localStorage` hace `fetch()` a la API de arriba. |
-| [`UTP-Nomenclaturas.html`](UTP-Nomenclaturas.html) | Herramienta de referencia original (un solo HTML, sin backend, guarda en `localStorage`). Fuente de verdad de las reglas de negocio y punto de partida para migrar datos reales. |
-| [`SDD-UTP-Nomenclaturas.md`](SDD-UTP-Nomenclaturas.md) | Especificación completa de arquitectura y reglas de negocio (dominio, contrato de API, condicionales D1-D4, plan de construcción por fases). |
+| [`utp_nomenclaturas/`](utp_nomenclaturas) | Módulo Drupal 10.3+/11. Entidades de contenido (`Campaign`, `AdSet`, `Ad`, `ManualUtm`) sobre MySQL vía Entity API; diccionario y condicionales como Configuration; API REST bajo `/api/utp-nomenclaturas/v1/*`. |
+| [`utp_nomenclaturas/frontend/index.html`](utp_nomenclaturas/frontend/index.html) | Frontend: HTML/CSS/JS sin build, servido por el módulo en `/admin/utp/nomenclaturas`. Mismo layout que `UTP-Nomenclaturas.html`; la capa de persistencia pasa de `localStorage` a `fetch()` contra la API. |
+| [`UTP-Nomenclaturas.html`](UTP-Nomenclaturas.html) | Herramienta de referencia original. Fuente de verdad de las reglas de negocio y del layout. |
+| [`SDD-UTP-Nomenclaturas.md`](SDD-UTP-Nomenclaturas.md) | Especificación completa: dominio, contrato de API, condicionales D1-D4, esquema de datos, plan de construcción por fases. |
 
-## Cómo se conectan frontend, backend y base de datos
-
-No hay dos aplicaciones separadas: es **una sola página** (`index.html`)
-que le habla directo a **un solo módulo PHP** (Drupal), que es el único
-que toca MySQL. No hay React, no hay Node en producción, no hay paso de
-build para el frontend — se edita el HTML y se recarga la página.
+## Flujo de una escritura
 
 ```
 Navegador                    Drupal (PHP)                    MySQL
 ┌─────────────────┐         ┌──────────────────────┐         ┌──────┐
-│ index.html       │ fetch() │ Controller (PHP)      │ save() │ tabla │
+│ index.html       │ fetch() │ Controller             │ save() │ tabla │
 │ (HTML+CSS+JS)     │──────▶ │  ↓                     │──────▶ │ de la │
 │                   │  JSON  │ Service (valida/deriva)│        │entidad│
 │                   │◀────── │  ↓                     │◀────── │       │
-└─────────────────┘         │ Entity API (Drupal)    │         └──────┘
+└─────────────────┘         │ Entity API             │         └──────┘
                              └──────────────────────┘
 ```
 
-Ejemplo real, línea por línea — qué pasa al hacer clic en **"Agregar
-campaña"** en el Constructor:
+Traza de `addCampaign()` (crear campaña):
 
-1. El botón llama a `addCampaign()` en `index.html`.
-2. `addCampaign()` llama a `apiPost('/campaigns', {...})` — la "capa de
-   comunicación con el backend", un bloque de ~15 funciones al principio
-   del `<script>` de `index.html`, comentado en detalle ahí mismo.
-3. Esa función hace un `fetch()` real a
-   `/api/utp-nomenclaturas/v1/campaigns` (`POST`), con el token CSRF que
-   Drupal exige para cualquier escritura.
-4. Drupal enruta esa URL (ver
-   [`utp_nomenclaturas.routing.yml`](utp_nomenclaturas/utp_nomenclaturas.routing.yml))
-   a `TreeController::createCampaign()`
-   ([`src/Controller/TreeController.php`](utp_nomenclaturas/src/Controller/TreeController.php)),
-   que valida el payload y se lo pasa a
-   `TreeManager::createCampaign()`
-   ([`src/Service/TreeManager.php`](utp_nomenclaturas/src/Service/TreeManager.php)).
-5. `TreeManager` valida las reglas de negocio (el campus existe, el medio
-   es válido para la etapa elegida, etc.), deriva el nombre de la campaña,
-   y llama a `$campaign->save()` — **esa línea es el `INSERT`/`UPDATE`
-   real en la tabla MySQL de la entidad `Campaign`**, generado por Drupal.
-6. El controlador responde con JSON (la campaña ya con su `id` real de
-   base de datos) y `addCampaign()` usa esa respuesta para actualizar la
-   pantalla.
+```
+addCampaign()                                          index.html
+  → apiPost('/campaigns', payload)                      apiFetch(), misma capa que el resto de mutaciones
+  → POST /api/utp-nomenclaturas/v1/campaigns             header X-CSRF-Token
+  → TreeController::createCampaign()                     src/Controller/TreeController.php
+  → TreeManager::createCampaign()                        src/Service/TreeManager.php
+      valida (§3.2/§3.3), deriva el nombre, $campaign->save()
+  → 201 + entidad persistida                              addCampaign() actualiza el estado local con la respuesta
+```
 
-Si el paso 5 falla una regla de negocio, PHP responde con un error (422 si
-falta un dato o viola una condicional, 409 si el nombre ya existe) y el
-`catch()` de cada función lo muestra como un aviso en pantalla — nunca se
-guarda nada a medias. Todas las demás acciones (editar, eliminar,
-duplicar, editar el diccionario en Configuración, UTMs manuales,
-exportar/restaurar backup) siguen exactamente el mismo patrón; cada una
-está comentada en `index.html` con qué endpoint llama.
+Violaciones de negocio responden 422 (condicional inválida) o 409
+(nombre duplicado); el `catch()` de cada función las muestra como aviso,
+sin persistencia parcial. El resto de las acciones (editar, eliminar,
+duplicar, Configuración, UTMs manuales, export/import) siguen el mismo
+patrón — cada función de `index.html` documenta su endpoint.
 
-### Qué tabla corresponde a qué
+### Tablas
 
-4 tablas MySQL reales, creadas por Drupal a partir de `src/Entity/*.php`
-(esquema completo con columnas en
-[`SDD-UTP-Nomenclaturas.md` §6](SDD-UTP-Nomenclaturas.md#6-esquema-de-base-de-datos)):
+4 tablas MySQL (esquema completo en
+[SDD §6](SDD-UTP-Nomenclaturas.md#6-esquema-de-base-de-datos)):
 
-| Tabla | Qué guarda |
+| Tabla | Contenido |
 |---|---|
-| `campaign` | Campañas del Constructor |
-| `ad_set` | Conjuntos de anuncios (FK a `campaign`) |
-| `ad` | Anuncios (FK a `ad_set`) |
-| `manual_utm` | UTMs manuales (influencers/orgánico) |
+| `campaign` | Campañas |
+| `ad_set` | Conjuntos de anuncios (FK `campaign_id`) |
+| `ad` | Anuncios (FK `ad_set_id`) |
+| `manual_utm` | UTMs manuales |
 
-El diccionario (listas, condicionales D1-D4, matriz Campus×Facultad) **no
-es una tabla** — es un solo objeto de Configuration de Drupal
-(`utp_nomenclaturas.dictionary`), explicado con el mapeo exacto en el
-[§6.3 del SDD](SDD-UTP-Nomenclaturas.md#63-diccionario-y-condicionales--configuration-no-tablas-sql).
-La tabla completa de "qué acción del frontend escribe dónde" está en el
-[§8.5 del SDD](SDD-UTP-Nomenclaturas.md#85-qué-acción-del-frontend-escribe-en-qué-tabla).
+Diccionario, condicionales D1-D4 y config de UTM viven en Configuration
+(`utp_nomenclaturas.dictionary`, `utp_nomenclaturas.utm_config`), no en
+tablas — mapeo en [SDD §6.3](SDD-UTP-Nomenclaturas.md#63-diccionario-y-condicionales--configuration-no-tablas-sql).
+Tabla completa acción→persistencia en
+[SDD §8.5](SDD-UTP-Nomenclaturas.md#85-qué-acción-del-frontend-escribe-en-qué-tabla).
 
-**Cómo comprobar que persiste de verdad:** crear una campaña y recargar la
-página (F5). Si siguiera en pantalla por `localStorage`, sobreviviría en
-ese navegador pero desaparecería en otro. Acá desaparece todo el estado de
-JavaScript en cada recarga — lo que se ve después de recargar viene 100%
-de un `GET` a la base de datos, no del navegador.
+Verificación de persistencia: crear un registro y recargar sin caché — el
+estado proviene de un `GET` a MySQL, no de almacenamiento del cliente.
 
 ## Requisitos
 
 - PHP >= 8.1, Composer
-- Un sitio Drupal 10.3+ u 11 con MySQL
-- Un navegador. Nada de Node.js hace falta para usar la herramienta — el
-  frontend es HTML/CSS/JS plano, no requiere compilar nada.
+- Drupal 10.3+ u 11 con MySQL
+- Un navegador — el frontend no requiere Node.js ni build
 
 ## Instalación — backend
 
 1. Copiar `utp_nomenclaturas/` a `modules/custom/` del sitio Drupal.
-2. Desde la raíz del sitio Drupal, agregar la dependencia declarada en
+2. Agregar la dependencia declarada en
    [`utp_nomenclaturas/composer.json`](utp_nomenclaturas/composer.json)
-   (`phpoffice/phpspreadsheet`, usado para exportar los Excel de
-   nomenclaturas/UTMs).
+   (`phpoffice/phpspreadsheet`, exports de Excel).
 3. Copiar [`.env.example`](.env.example) a `.env` en la raíz del proyecto
-   Drupal y completar los valores reales (ver [Variables de
-   entorno](#variables-de-entorno)).
+   Drupal y completar valores (ver [Variables de entorno](#variables-de-entorno)).
 4. Copiar [`settings.env.php`](settings.env.php) a
-   `sites/default/settings.env.php`, y agregar al final de
+   `sites/default/settings.env.php` y agregar al final de
    `sites/default/settings.php`:
    ```php
    require DRUPAL_ROOT . '/sites/default/settings.env.php';
    ```
-5. Instalar el módulo:
-   ```bash
-   drush en utp_nomenclaturas -y
-   ```
-6. Asignar los permisos correspondientes a cada rol (ver
-   [Permisos](#permisos)).
+5. `drush en utp_nomenclaturas -y`
+6. Asignar permisos por rol (ver [Permisos](#permisos)).
 
-La página del builder queda disponible en `/admin/utp/nomenclaturas` — no
-hay un paso de "instalación de frontend" aparte: `js/app/index.html` ya
-está en el módulo, `AppController.php` lo sirve directo.
+El builder queda en `/admin/utp/nomenclaturas`; `AppController.php` sirve
+`frontend/index.html` directo, sin paso de instalación aparte.
 
 ## Variables de entorno
 
-Ver [`.env.example`](.env.example). Resumen:
+Ver [`.env.example`](.env.example):
 
-| Variable | Para qué |
+| Variable | Uso |
 |---|---|
-| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PREFIX` | Conexión a MySQL |
-| `DRUPAL_HASH_SALT` | Salt de seguridad de Drupal (generar con `openssl rand -base64 55`) |
-| `TRUSTED_HOST_PATTERNS` | Dominios permitidos, como regex separados por coma |
-| `CONFIG_SYNC_DIRECTORY` | Directorio de sync de configuración (`drush cex`/`cim`) |
-| `APP_ENV` | `dev` \| `staging` \| `prod` — controla logging y caché |
+| `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_PREFIX` | Conexión MySQL |
+| `DRUPAL_HASH_SALT` | Salt de Drupal (`openssl rand -base64 55`) |
+| `TRUSTED_HOST_PATTERNS` | Dominios permitidos, regex separados por coma |
+| `CONFIG_SYNC_DIRECTORY` | Directorio de sync (`drush cex`/`cim`) |
+| `APP_ENV` | `dev` \| `staging` \| `prod` |
 
-Si el hosting ya inyecta estas variables (Docker/DDEV/Lando/Kubernetes),
-no hace falta un `.env` real ni instalar `vlucas/phpdotenv`.
+Si el hosting inyecta estas variables (Docker/DDEV/Lando/Kubernetes), no
+hace falta `.env` ni `vlucas/phpdotenv`.
 
-## Editar el frontend
+## Frontend
 
-`utp_nomenclaturas/js/app/index.html` es un archivo autocontenido (CSS en
-`<style>`, JS en `<script>`, sin dependencias salvo la librería pública
-`xlsx.full.min.js` para generar Excel en el navegador). Para editarlo:
-cambiar el archivo y recargar la página — no hay `npm install` ni build.
-La "capa de comunicación con el backend" (todas las funciones que hacen
-`fetch()`) está agrupada al principio del `<script>`, separada del resto
-de la lógica de UI/negocio.
+`utp_nomenclaturas/frontend/index.html`: CSS y JS inline, sin
+dependencias salvo `xlsx.full.min.js` (CDN, generación de Excel en
+cliente). Se edita y se recarga; no hay build. La capa de comunicación
+con la API (`apiFetch`/`apiGet`/`apiPost`/`apiPut`/`apiPatch`/`apiDelete`)
+está al inicio del `<script>`, separada de la lógica de UI.
 
 ## Permisos
 
-| Permiso | Para qué |
+| Permiso | Alcance |
 |---|---|
-| `access utp nomenclaturas` | Lectura del árbol de campañas y configuración vía API |
-| `edit utp nomenclaturas` | Crear, editar, eliminar y duplicar campañas/conjuntos/anuncios, UTMs manuales, export/import |
-| `administer utp nomenclaturas config` | Editar listas del diccionario, condicionales por etapa, pilares por segmento y la matriz Campus×Facultad |
+| `access utp nomenclaturas` | Lectura del árbol y configuración |
+| `edit utp nomenclaturas` | CRUD/duplicate de campañas/conjuntos/anuncios, UTMs manuales, export/import |
+| `administer utp nomenclaturas config` | Diccionario, condicionales, matriz Campus×Facultad |
 
 ## Testing
 
-- Backend: PHPUnit (Kernel/Unit) en `utp_nomenclaturas/tests/` —
-  `vendor/bin/phpunit -c core --group utp_nomenclaturas` (o el runner que
-  use el sitio Drupal).
-- Frontend: sin suite automatizada (es HTML/JS plano, sin framework de
-  testing) — se verificó manualmente en navegador real contra un servidor
-  Node de referencia que implementa el mismo contrato de API, confirmando
-  que crear/editar/eliminar/duplicar, la Configuración y las UTMs
-  manuales persisten de verdad y sobreviven a un reload completo de la
-  página.
+- Backend: PHPUnit (Kernel/Unit), `utp_nomenclaturas/tests/` —
+  `vendor/bin/phpunit -c core --group utp_nomenclaturas`.
+- Frontend: sin suite (HTML/JS sin framework). Verificado contra un
+  servidor de referencia que implementa el mismo contrato REST: CRUD,
+  Configuración y UTMs manuales persisten y sobreviven a reload completo;
+  export/import es idempotente.
 
 ## Documentación adicional
 
-`SDD-UTP-Nomenclaturas.md` tiene el detalle completo de dominio, contrato
-de API, reglas condicionales (D1-D4) y la ruta de migración desde
-`UTP-Nomenclaturas.html`.
+- [`ARQUITECTURA.md`](ARQUITECTURA.md) — mapeo frontend↔API↔tablas.
+- [`SDD-UTP-Nomenclaturas.md`](SDD-UTP-Nomenclaturas.md) — dominio,
+  contrato de API, condicionales (D1-D4), esquema, migración.

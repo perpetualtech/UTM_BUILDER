@@ -9,17 +9,15 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Sirve el builder como página HTML/CSS/JS plana (sin framework, sin paso
- * de build) — `js/app/index.html`, una sola página autocontenida como
- * `UTP-Nomenclaturas.html` original, pero con `fetch()` real contra
- * `/api/utp-nomenclaturas/v1/*` en vez de `localStorage`.
+ * Sirve `frontend/index.html`: página HTML/CSS/JS autocontenida, sin
+ * framework ni build, análoga a `UTP-Nomenclaturas.html` pero con
+ * `fetch()` contra `/api/utp-nomenclaturas/v1/*` en vez de `localStorage`.
  *
- * Se devuelve como Response cruda (no un render array de Drupal): la
- * página ya trae su propio `<html><head><style>`, así que montarla dentro
- * del theme de administración de Drupal duplicaría el documento. El único
- * dato que Drupal necesita inyectarle es la URL base de la API y el token
- * CSRF, vía `window.UTP_SETTINGS` (ver la capa "CAPA DE COMUNICACIÓN CON
- * EL BACKEND" al inicio del `<script>` del archivo).
+ * Se devuelve como Response cruda, no como render array: el documento
+ * trae su propio `<html><head><style>`, y montarlo dentro del theme de
+ * administración duplicaría la estructura. Lo único inyectado por Drupal
+ * es `window.UTP_SETTINGS` (URL base de la API + token CSRF) — ver la
+ * capa de comunicación al inicio del `<script>` del archivo servido.
  */
 class AppController extends ControllerBase {
 
@@ -42,11 +40,11 @@ class AppController extends ControllerBase {
    */
   public function app(): Response {
     $modulePath = \DRUPAL_ROOT . '/' . $this->moduleExtensionList->getPath('utp_nomenclaturas');
-    $appPath = $modulePath . '/js/app/index.html';
+    $appPath = $modulePath . '/frontend/index.html';
 
     if (!is_file($appPath)) {
       return new Response(
-        '<p style="font-family:sans-serif;padding:40px">No se encontró js/app/index.html del módulo utp_nomenclaturas.</p>',
+        '<p style="font-family:sans-serif;padding:40px">No se encontró frontend/index.html del módulo utp_nomenclaturas.</p>',
         500
       );
     }
