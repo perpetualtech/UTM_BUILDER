@@ -141,4 +141,47 @@ class TreeControllerValidationTest extends KernelTestBase {
     $this->assertSame('D3', $data['details']['conditional_id']);
   }
 
+  /**
+   * Prueba directa del FK real (ADR §6.2, AdSet/Ad::ON_DELETE_CASCADE):
+   * borrar la campaña debe borrar en cascada su conjunto y su anuncio,
+   * sin que TreeManager tenga que borrarlos a mano — es la Entity API de
+   * Drupal la que lo hace al resolver la referencia con cascada.
+   */
+  public function testDeleteCampaignCascadesToAdSetAndAd(): void {
+    $campaignResponse = $this->dispatch($this->jsonRequest('POST', '/api/utp-nomenclaturas/v1/campaigns', $this->validCampaignPayload()));
+    $campaignUuid = json_decode($campaignResponse->getContent(), TRUE)['uuid'];
+
+    $adSetResponse = $this->dispatch($this->jsonRequest(
+      'POST',
+      "/api/utp-nomenclaturas/v1/campaigns/$campaignUuid/ad-sets",
+      ['meta' => ['edad' => 'j1', 'ubicacion' => 'lima', 'facultad' => 'ing', 'senal' => 'broad', 'detalle' => '']]
+    ));
+    $this->assertEquals(201, $adSetResponse->getStatusCode());
+    $adSetUuid = json_decode($adSetResponse->getContent(), TRUE)['uuid'];
+
+    $adResponse = $this->dispatch($this->jsonRequest(
+      'POST',
+      "/api/utp-nomenclaturas/v1/ad-sets/$adSetUuid/ads",
+      ['meta' => ['formato' => 'video', 'nombre' => 'marca', 'motivo' => 'testimonial', 'mensaje' => '', 'carrera' => 'no-carreras', 'fecha' => 'ene26'], 'url' => 'https://utp.edu.pe']
+    ));
+    $this->assertEquals(201, $adResponse->getStatusCode());
+    $adUuid = json_decode($adResponse->getContent(), TRUE)['uuid'];
+
+    // Confirmar que existen antes de borrar (si no, el resto del test no prueba nada).
+    $adSetStorage = $this->container->get('entity_type.manager')->getStorage('ad_set');
+    $adStorage = $this->container->get('entity_type.manager')->getStorage('ad');
+    $this->assertNotEmpty($adSetStorage->loadByProperties(['uuid' => $adSetUuid]));
+    $this->assertNotEmpty($adStorage->loadByProperties(['uuid' => $adUuid]));
+
+    $deleteResponse = $this->dispatch($this->jsonRequest('DELETE', "/api/utp-nomenclaturas/v1/campaigns/$campaignUuid"));
+    $this->assertEquals(204, $deleteResponse->getStatusCode());
+
+    // La cascada real de la Entity API (ON_DELETE_CASCADE) debe haber
+    // borrado el conjunto y el anuncio sin que nadie los borre a mano.
+    $adSetStorage->resetCache();
+    $adStorage->resetCache();
+    $this->assertEmpty($adSetStorage->loadByProperties(['uuid' => $adSetUuid]), 'El conjunto debía borrarse en cascada junto con la campaña.');
+    $this->assertEmpty($adStorage->loadByProperties(['uuid' => $adUuid]), 'El anuncio debía borrarse en cascada junto con la campaña.');
+  }
+
 }
